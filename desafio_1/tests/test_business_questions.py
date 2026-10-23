@@ -14,6 +14,7 @@ from agent import prompts
 from agent.db import UnsafeQueryError, run_query
 from agent.graph import build_agent
 from agent.config import Settings
+from agent.nodes import _partial_month_notes
 from agent.schema import discover_schema, find_partial_months
 
 DB = ROOT.parent / "data" / "anexo_desafio_1.db"
@@ -321,10 +322,27 @@ def test_result_with_partial_months_carries_a_data_note():
     assert "2024-07, 2025-07" in result["data_notes"][0]
 
 
-def test_result_with_complete_months_has_no_data_note():
+def test_series_of_complete_months_reports_the_partial_months_left_out():
     llm = ScriptedLLM([COMPLAINT_TREND, '{"verdict": "ok", "feedback": ""}', TABLE_VIZ, "Tendência."])
     result = _ask(llm, "Qual a tendência de reclamações por canal no último ano?")
+    assert result["data_notes"] == [
+        "2024-07, 2025-07 ficaram de fora do resultado por ter dados parciais no banco."
+    ]
+
+
+def test_totals_without_month_column_have_no_data_note():
+    llm = RecordingLLM([PURCHASES_PER_CUSTOMER, '{"verdict": "ok", "feedback": ""}', TABLE_VIZ, "Roupas lidera."])
+    result = _ask(llm, "Quais categorias tiveram mais compras em media por cliente?")
     assert result["data_notes"] == []
+    answer_call = next(m for m in llm.calls if m[0].content == prompts.ANSWER_SYSTEM)
+    assert "Observações sobre os dados: nenhuma" in answer_call[1].content
+
+
+def test_cohort_months_report_only_the_adjacent_partial_month():
+    rows = [("2024-08", 43), ("2024-12", 2), ("2025-03", 1)]
+    assert _partial_month_notes(["coorte", "clientes"], rows, ["2024-07", "2025-07"]) == [
+        "2024-07 ficou de fora do resultado por ter dados parciais no banco."
+    ]
 
 
 def test_multi_channel_trend_keeps_series_when_viz_model_fails():

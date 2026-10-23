@@ -68,19 +68,34 @@ def _parse_assessment(text: str) -> tuple[str, str, str]:
             verdict = "ok"
     return verdict, feedback, assumption
 
-def _partial_month_notes(rows: list[tuple], partial_months: list[str]) -> list[str]:
-    """Avisa quando o resultado agrega meses que o banco cobre só em parte."""
-    if not partial_months:
+def _shift_month(month: str, delta: int) -> str:
+    year, mon = map(int, month.split("-"))
+    index = year * 12 + mon - 1 + delta
+    return f"{index // 12:04d}-{index % 12 + 1:02d}"
+
+def _partial_month_notes(columns: list[str], rows: list[tuple],
+                         partial_months: list[str]) -> list[str]:
+    """Explica como os meses parciais do banco afetam um resultado agrupado por mês."""
+    if not partial_months or not rows:
         return []
-    found = sorted({
-        value for row in rows for value in row
-        if isinstance(value, str) and _MONTH_RE.match(value) and value in partial_months
-    })
-    if not found:
-        return []
-    months = ", ".join(found)
-    return [f"O banco cobre apenas parte de {months}; os valores desse período "
-            "não são comparáveis aos de meses completos."]
+    for idx in range(len(columns)):
+        values = [row[idx] for row in rows if row[idx] is not None]
+        if not values or not all(isinstance(v, str) and _MONTH_RE.match(v) for v in values):
+            continue
+        months = set(values)
+        included = [m for m in partial_months if m in months]
+        edges = {_shift_month(min(months), -1), _shift_month(max(months), 1)}
+        left_out = [m for m in partial_months if m in edges]
+        notes = []
+        if included:
+            notes.append(f"O banco cobre apenas parte de {', '.join(included)}; os valores "
+                         "desse período não são comparáveis aos de meses completos.")
+        if left_out:
+            verb = "ficou" if len(left_out) == 1 else "ficaram"
+            notes.append(f"{', '.join(left_out)} {verb} de fora do resultado por "
+                         "ter dados parciais no banco.")
+        return notes
+    return []
 
 def make_nodes(llm: ChatModel, settings: Settings) -> dict:
     """Cria os nos com o LLM e as settings injetados (closures)."""
@@ -194,6 +209,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
                 HumanMessage(prompts.ASSESS_HUMAN.format(
                     question=state["question"],
                     history=_format_history(history),
+                    partial_months=", ".join(state.get("partial_months") or []) or "nenhum",
                     sql=state.get("sql", ""),
                     result=json.dumps(result, ensure_ascii=False),
                 )),
@@ -295,7 +311,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
 
         columns = state.get("result_columns", [])
         rows = state.get("result_rows", [])
-        notes = _partial_month_notes(rows, state.get("partial_months") or [])
+        notes = _partial_month_notes(columns, rows, state.get("partial_months") or [])
         preview = {
             "columns": columns,
             "rows": [list(r) for r in rows[:50]],

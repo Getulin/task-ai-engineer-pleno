@@ -14,11 +14,14 @@ Regras importantes:
   ano", use os 12 meses anteriores a maior data da tabela relevante, incluindo
   essa data. Calcule o limite a partir de MAX(coluna_de_data), sem datas fixas.
 - O schema indica os meses parciais de cada coluna de data (dados que comecam ou
-  terminam no meio do mes). Em series mensais, tendencias e coortes, exclua esses
-  meses, salvo se a pergunta pedir o contrario: um mes parcial aparenta uma queda
-  que nao existe.
+  terminam no meio do mes). Em resultados agrupados por mes (series, tendencias)
+  e em coortes, exclua esses meses, salvo se a pergunta pedir o contrario: um mes
+  parcial aparenta uma queda que nao existe. Em totais, contagens e medias de um
+  periodo, use todos os dados do periodo, inclusive os meses parciais.
 - Em coortes e retencao, so conte um mes de acompanhamento como observado quando
   ele estiver completo nos dados.
+- Contagem de meses apos um evento: o mes do evento e M0, "mes seguinte" e M+1 e
+  "terceiro mes" e M+3, salvo se a pergunta definir outra contagem.
 - Para perguntas sobre TENDENCIA/evolucao, selecione strftime('%Y-%m', coluna)
   AS mes diretamente, agrupe por esse mes e ordene por ele (serie temporal real).
   Nao use CTEs com datas fixas nem BETWEEN de valores constantes.
@@ -80,6 +83,9 @@ WITH que responda à pergunta. Responda somente com SQL."""
 ASSESS_SYSTEM = """Verifique se uma consulta SQL e seu resultado respondem à pergunta
 original. Considere a métrica, filtros, agrupamentos, período e granularidade.
 Uma consulta que executou sem erro ainda pode calcular a métrica errada.
+Confira se o resultado tem um grupo por item pedido (por exemplo, uma linha por
+mês, canal ou coorte quando a pergunta agrupa por eles) e se os denominadores e
+totais são plausíveis para o que está sendo medido.
 
 Escolha um veredito:
 - "ok": a consulta responde à pergunta, inclusive quando o resultado vazio é correto.
@@ -92,10 +98,18 @@ Escolha um veredito:
 Não peça revisão apenas para trocar uma leitura razoável por outra. Se houver
 revisões anteriores, não reabra pontos que a consulta atual já corrigiu nem
 contradiga correções pedidas antes. Não invente resultados.
+
+Convenções já adotadas pelo sistema, que não são erro:
+- Contagem de meses após um evento: o mês do evento é M0, "mês seguinte" é M+1 e
+  "terceiro mês" é M+3, salvo se a pergunta definir outra contagem.
+- Meses com dados parciais ficam fora de resultados agrupados por mês e de
+  coortes; totais, contagens e médias de um período incluem esses meses.
+
 Responda somente JSON: {"verdict": "ok", "feedback": "", "assumption": ""}"""
 
 ASSESS_HUMAN = """Pergunta: {question}
 Revisões anteriores: {history}
+Meses com dados parciais no banco: {partial_months}
 SQL: {sql}
 Resultado: {result}"""
 
@@ -124,7 +138,10 @@ Se o resultado estiver vazio, diga que nao ha dados para o filtro informado.
 Se houver premissas, declare-as em uma frase no início da resposta.
 Se houver ressalva pendente, apresente os números como não confirmados e diga em
 uma frase qual ponto ficou em aberto.
-Se houver observações sobre os dados, mencione-as ao interpretar os valores."""
+Se houver observações sobre os dados, mencione-as ao interpretar os valores.
+Quando a pergunta tiver termos com mais de uma leitura (como "terceiro mês" ou
+"último ano"), diga em uma frase como o SQL executado os interpretou. Não afirme
+exclusões de dados que não estejam nas observações ou no SQL."""
 
 ANSWER_HUMAN = """Pergunta: {question}
 
