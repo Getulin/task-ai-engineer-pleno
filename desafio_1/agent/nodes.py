@@ -117,6 +117,10 @@ def make_nodes(llm: BaseChatModel, settings: Settings) -> dict:
         except (sqlite3.Error, UnsafeQueryError, FileNotFoundError, ValueError) as exc:
             return {
                 "error": str(exc),
+                "result_columns": [],
+                "result_rows": [],
+                "result_truncated": False,
+                "last_was_empty": False,
                 "repair_count": state.get("repair_count", 0) + 1,
                 "trace": _append_trace(
                     state, "erro_execucao",

@@ -198,6 +198,24 @@ def test_sql_execution_error_is_repaired_and_both_queries_are_visible():
     assert steps.count("gerar_sql") == 2
 
 
+def test_failed_review_does_not_leave_previous_result_visible():
+    llm = ScriptedLLM([
+        "SELECT COUNT(*) AS clientes FROM clientes",
+        '{"sufficient": false, "feedback": "A contagem não aplica os filtros pedidos."}',
+        "SELECT * FROM tabela_inexistente",
+        "SELECT * FROM tabela_inexistente",
+        "SELECT * FROM tabela_inexistente",
+    ])
+    result = build_agent(_settings(), llm=llm).invoke({
+        "question": "Quantos clientes interagiram com campanhas de WhatsApp em 2024?",
+        "trace": [],
+    })
+    assert "falhou" in result["answer"]
+    assert result["result_columns"] == []
+    assert result["result_rows"] == []
+    assert result["result_truncated"] is False
+
+
 def test_multi_channel_trend_keeps_series_when_viz_model_fails():
     llm = ScriptedLLM([
         COMPLAINT_TREND,
