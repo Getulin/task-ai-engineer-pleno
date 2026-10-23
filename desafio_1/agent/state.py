@@ -26,6 +26,10 @@ class AgentState(TypedDict, total=False):
     error: Optional[str]
     repair_count: int
 
+    last_was_empty: bool
+    empty_retries: int
+    reconsider_empty: bool
+
     viz: VizSpec
     answer: str
 

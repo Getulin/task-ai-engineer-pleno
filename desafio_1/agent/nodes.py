@@ -50,30 +50,33 @@ def make_nodes(llm: BaseChatModel, settings: Settings) -> dict:
         }
 
     def generate_sql(state: AgentState) -> AgentState:
-        is_repair = bool(state.get("error"))
-        if is_repair:
-            messages = [
-                SystemMessage(prompts.SQL_SYSTEM.format(schema=state["schema"])),
-                HumanMessage(prompts.SQL_REPAIR.format(
-                    question=state["question"],
-                    sql=state.get("sql", ""),
-                    error=state.get("error", ""),
-                )),
-            ]
+        system = SystemMessage(prompts.SQL_SYSTEM.format(schema=state["schema"]))
+        patch: dict = {}
+
+        if state.get("reconsider_empty"):
+            human = HumanMessage(prompts.SQL_RECONSIDER_EMPTY.format(
+                question=state["question"], sql=state.get("sql", ""),
+            ))
+            detail = f"Resultado vazio: reconsiderando suposicoes (tentativa #{state.get('empty_retries', 0)})."
+            patch["reconsider_empty"] = False
+        elif state.get("error"):
+            human = HumanMessage(prompts.SQL_REPAIR.format(
+                question=state["question"], sql=state.get("sql", ""),
+                error=state.get("error", ""),
+            ))
             detail = f"Tentativa de correcao #{state.get('repair_count', 0)} apos erro."
         else:
-            messages = [
-                SystemMessage(prompts.SQL_SYSTEM.format(schema=state["schema"])),
-                HumanMessage(state["question"]),
-            ]
+            human = HumanMessage(state["question"])
             detail = "Gerei a consulta SQL inicial a partir da pergunta."
 
-        sql = _text(llm.invoke(messages))
+        sql = _text(llm.invoke([system, human]))
         try:
             sql = validate_read_only(sql)
         except UnsafeQueryError:
             pass
-        return {"sql": sql, "trace": _append_trace(state, "gerar_sql", detail, sql)}
+        patch["sql"] = sql
+        patch["trace"] = _append_trace(state, "gerar_sql", detail, sql)
+        return patch
 
     def execute_sql(state: AgentState) -> AgentState:
         sql = state.get("sql", "")
@@ -83,6 +86,7 @@ def make_nodes(llm: BaseChatModel, settings: Settings) -> dict:
                 "result_columns": result.columns,
                 "result_rows": result.rows,
                 "error": None,
+                "last_was_empty": result.row_count == 0,
                 "trace": _append_trace(
                     state, "executar_sql",
                     f"Consulta executada com sucesso: {result.row_count} linha(s).",
@@ -147,10 +151,21 @@ def make_nodes(llm: BaseChatModel, settings: Settings) -> dict:
         return {"answer": answer,
                 "trace": _append_trace(state, "resposta", "Sintetizei a resposta final em linguagem natural.")}
 
+    def reconsider(state: AgentState) -> AgentState:
+        return {
+            "reconsider_empty": True,
+            "empty_retries": state.get("empty_retries", 0) + 1,
+            "trace": _append_trace(
+                state, "reflexao_vazio",
+                "Resultado vazio inesperado: vou reconsiderar as suposicoes.",
+            ),
+        }
+
     return {
         "discover": discover,
         "generate_sql": generate_sql,
         "execute_sql": execute_sql,
+        "reconsider": reconsider,
         "decide_viz": decide_viz,
         "synthesize": synthesize,
     }

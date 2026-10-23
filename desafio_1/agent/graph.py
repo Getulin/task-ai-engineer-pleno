@@ -7,12 +7,16 @@ from .llm import build_llm
 from .nodes import make_nodes
 from .state import AgentState
 
+_MAX_EMPTY_RETRIES = 1
+
 def _route_after_execute(settings: Settings):
     def router(state: AgentState) -> str:
         if state.get("error"):
             if state.get("repair_count", 0) < settings.max_repair_attempts:
                 return "repair"
             return "give_up"
+        if state.get("last_was_empty") and state.get("empty_retries", 0) < _MAX_EMPTY_RETRIES:
+            return "reconsider"
         return "ok"
     return router
 
@@ -26,6 +30,7 @@ def build_agent(settings: Settings | None = None):
     g.add_node("discover", nodes["discover"])
     g.add_node("generate_sql", nodes["generate_sql"])
     g.add_node("execute_sql", nodes["execute_sql"])
+    g.add_node("reconsider", nodes["reconsider"])
     g.add_node("decide_viz", nodes["decide_viz"])
     g.add_node("synthesize", nodes["synthesize"])
 
@@ -35,8 +40,14 @@ def build_agent(settings: Settings | None = None):
     g.add_conditional_edges(
         "execute_sql",
         _route_after_execute(settings),
-        {"repair": "generate_sql", "give_up": "synthesize", "ok": "decide_viz"},
+        {
+            "repair": "generate_sql",
+            "reconsider": "reconsider",
+            "give_up": "synthesize",
+            "ok": "decide_viz",
+        },
     )
+    g.add_edge("reconsider", "generate_sql")
     g.add_edge("decide_viz", "synthesize")
     g.add_edge("synthesize", END)
 

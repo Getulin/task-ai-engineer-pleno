@@ -10,6 +10,15 @@ Regras importantes:
   valores nos filtros (ex.: canal = 'App', tipo_contato = 'Reclamacao').
 - Datas sao texto no formato 'YYYY-MM-DD'. Para filtrar por ano/mes use
   strftime('%Y', coluna) ou strftime('%Y-%m', coluna).
+- NAO use date('now')/strftime('now'): os dados sao historicos. Para "ultimo
+  ano", use os 12 meses anteriores a maior data da tabela relevante, incluindo
+  essa data. Calcule o limite a partir de MAX(coluna_de_data), sem datas fixas.
+- Para perguntas sobre TENDENCIA/evolucao, selecione strftime('%Y-%m', coluna)
+  AS mes diretamente, agrupe por esse mes e ordene por ele (serie temporal real).
+  Nao use CTEs com datas fixas nem BETWEEN de valores constantes.
+- Se um MES for citado SEM o ano (ex.: "em maio"), filtre apenas pelo mes com
+  strftime('%m', coluna) = '05' para abranger todos os anos — NAO fixe um ano
+  que pode nao ter dados.
 - Colunas booleanas (resolvido, interagiu) usam 0/1. "nao resolvido" = resolvido = 0.
 - Faca os JOINs necessarios pelas chaves estrangeiras indicadas.
 - Nao invente colunas. Nao escreva comandos de escrita (INSERT/UPDATE/DELETE/DDL).
@@ -31,6 +40,23 @@ Erro retornado pelo banco:
 {error}
 
 Corrija a consulta. Responda SOMENTE com o SQL corrigido, sem explicacao e sem markdown."""
+
+SQL_RECONSIDER_EMPTY = """A consulta abaixo executou com sucesso, mas retornou 0 linhas.
+
+Pergunta original:
+{question}
+
+Consulta que retornou vazio:
+{sql}
+
+A causa MAIS comum e assumir um ANO que nao tem dados. Antes de repetir o mesmo
+ano, confira no schema o intervalo real de datas. Se a pergunta cita um mes sem
+ano, NAO fixe o ano: filtre so pelo mes com strftime('%m', coluna) = 'MM'.
+Outra causa e grafia diferente num filtro de texto — use exatamente os
+"valores possiveis" do schema.
+
+Se, apos revisar, 0 for realmente a resposta correta, devolva a MESMA consulta.
+Caso contrario, devolva a consulta corrigida. Responda SOMENTE com o SQL, sem markdown."""
 
 VIZ_SYSTEM = """Voce escolhe a melhor forma de visualizar o resultado de uma consulta.
 Dada a pergunta e as colunas/amostra do resultado, escolha UM tipo:

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import re
 import sqlite3
 from pathlib import Path
 
 _MAX_DISTINCT_FOR_ENUM = 25
 _SAMPLE_EXAMPLES = 3
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}")
 
 def _connect_ro(db_path: str) -> sqlite3.Connection:
     uri = f"file:{Path(db_path).as_posix()}?mode=ro"
@@ -62,6 +64,15 @@ def _column_hint(cur: sqlite3.Cursor, table: str, col: str, col_type: str) -> st
         if row and row[0] is not None:
             return f"  -> intervalo: {row[0]} a {row[1]}"
         return ""
+
+    sample_val = cur.execute(
+        f"SELECT {quoted} FROM '{table}' WHERE {quoted} IS NOT NULL LIMIT 1"
+    ).fetchone()
+    if sample_val and _DATE_RE.match(str(sample_val[0])):
+        row = cur.execute(
+            f"SELECT MIN({quoted}), MAX({quoted}) FROM '{table}' WHERE {quoted} IS NOT NULL"
+        ).fetchone()
+        return f"  -> datas de {row[0]} ate {row[1]} (formato YYYY-MM-DD)"
 
     try:
         distinct = cur.execute(
