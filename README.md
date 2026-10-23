@@ -1,10 +1,10 @@
 # Assistente de dados — Desafio 1
 
-Aplicação em Python para responder perguntas de negócio sobre o banco SQLite fornecido no desafio. O usuário faz uma pergunta em português; o agente consulta o esquema do banco, gera SQL, executa a consulta e apresenta a resposta com tabela ou gráfico.
+Aplicação em Python para responder perguntas de negócio sobre o banco SQLite fornecido no desafio. O usuário faz uma pergunta em português; o agente consulta o esquema do banco, gera SQL, executa a consulta e apresenta a resposta com tabela ou gráfico, junto com as consultas executadas.
 
 Este repositório implementa o **Desafio 1**. O Desafio 2 não faz parte da entrega de código.
 
-## Executar
+## Execução
 
 Requer Python 3.11 ou superior. A configuração padrão também requer Ollama instalado. O banco de exemplo está em `data/anexo_desafio_1.db`.
 
@@ -28,11 +28,25 @@ ollama pull qwen2.5-coder:7b
 .venv/bin/python -m streamlit run desafio_1/app.py
 ```
 
-O exemplo usa Ollama em `http://localhost:11434`. Também é possível configurar `LLM_PROVIDER` como `gemini`, `openai` ou `groq` no `.env`, junto com a chave do provedor escolhido. O modelo configurado precisa estar disponível no respectivo serviço.
+### Configuração
 
-Para usar o modelo Gemini empregado na validação, configure `LLM_PROVIDER=gemini`, `LLM_MODEL=gemini-3.5-flash-lite` e `GEMINI_API_KEY` no `.env`. O arquivo `.env` é ignorado pelo Git.
+O `.env` define o provedor e os limites. Ele é ignorado pelo Git.
 
-## Fluxo
+| Variável | Uso |
+| --- | --- |
+| `LLM_PROVIDER` | `ollama` (padrão), `gemini`, `openai` ou `groq` |
+| `LLM_MODEL` | Modelo do provedor, por exemplo `qwen2.5-coder:7b` ou `gemini-3.5-flash-lite` |
+| `GEMINI_API_KEY`, `OPENAI_API_KEY`, `GROQ_API_KEY` | Chave do provedor escolhido |
+| `LLM_REQUESTS_PER_SECOND` | Limite de requisições ao provedor; `0.2` na camada gratuita do Gemini |
+| `SQL_ROW_LIMIT`, `SQL_TIMEOUT_SECONDS` | Limites por consulta (padrão: 1.000 linhas e 10 s) |
+
+### Testes
+
+```bash
+python -m pytest desafio_1/tests -q
+```
+
+## Fluxo e arquitetura
 
 ```text
 pergunta
@@ -41,42 +55,46 @@ pergunta
      ├─ erro de SQL: nova tentativa com a mensagem de erro
      └─ resultado vazio: uma reconsideração dos filtros
   → verificação de aderência entre pergunta, SQL e resultado
-     └─ resultado insuficiente: até uma consulta adicional
+     ├─ leitura ambígua: segue com a premissa declarada
+     └─ erro objetivo: até uma consulta adicional; se persistir, resposta com ressalva
   → escolha de tabela, barras ou linhas
   → resposta e registro das etapas/consultas
 ```
 
-O grafo está em `desafio_1/agent/graph.py`. `schema.py` inspeciona o banco em tempo de execução e inclui no contexto valores de colunas de baixa cardinalidade e intervalos de datas. `db.py` aceita uma instrução `SELECT` ou `WITH` por vez e abre o SQLite em modo somente leitura. `nodes.py` executa as etapas e registra as consultas e erros que a interface mostra em “Etapas e consultas”.
+O agente é um grafo de estados em LangGraph (`desafio_1/agent/graph.py`). O grafo deixa explícitos os pontos em que o agente volta a gerar SQL e limita quantas vezes isso acontece, o que mantém o comportamento previsível e cada etapa visível na interface.
 
-O fluxo usa até uma consulta adicional após a verificação semântica. Se ela continuar insuficiente, informa que não conseguiu confirmar a resposta. Essa verificação também depende do modelo configurado: ela reduz alguns erros, mas não comprova que toda resposta esteja correta.
-
-## Visualização
-
-Listas aparecem em tabela; comparações podem usar barras; séries temporais podem usar linhas. Em resultados com `mês`, `canal` e uma medida numérica, o gráfico de linhas separa as séries por canal. O usuário pode pedir uma forma de apresentação específica na pergunta, mas a escolha final depende da estrutura retornada e da decisão do modelo.
-
-O limite padrão é de 1.000 linhas por consulta. A interface avisa quando a consulta retornou mais linhas. A síntese em linguagem natural recebe até 50 linhas e é instruída a identificar uma resposta baseada em amostra.
-
-## Verificação
-
-```bash
-python -m pytest desafio_1/tests -q
-```
-
-Na revisão desta entrega, **30 testes passaram**. Eles cobrem acesso ao banco, proteção contra escrita, reparo de SQL, revisão de uma consulta válida porém incompleta, descarte de resultados antigos após falha, visualização por canal e consultas de referência para as cinco perguntas do enunciado. Valores conferidos diretamente no banco:
-
-| Pergunta | Resultado de referência |
+| Módulo | Responsabilidade |
 | --- | --- |
-| Estados com mais clientes que compraram pelo app em maio | São Paulo 6; Minas Gerais 3; Santa Catarina 3; Alagoas 2; Espírito Santo 2 |
-| Clientes que interagiram com WhatsApp em 2024 | 17 |
-| Compras por cliente, por categoria | Roupas 2,21; Viagens 2,16 no topo |
-| Reclamações não resolvidas por canal | Telefone 19; Chat 18; E-mail 14 |
-| Tendência de reclamações por canal no último ano dos dados | Série mensal por canal, de julho de 2024 a julho de 2025 |
+| `schema.py` | Lê o esquema em tempo de execução: tabelas, colunas, relações, valores de colunas de baixa cardinalidade, intervalos de datas e meses cobertos só em parte. Nenhuma consulta é fixa no código. |
+| `db.py` | Executa uma instrução `SELECT` ou `WITH` por vez, em conexão somente leitura, com limite de linhas e de tempo. |
+| `nodes.py` | Gera, executa, corrige e verifica o SQL; escolhe a visualização e redige a resposta. |
+| `llm.py` | Cria o modelo do provedor configurado e repete chamadas recusadas por limite de taxa. |
+| `app.py` | Interface Streamlit com resposta, gráfico, avisos e a seção “Etapas e consultas”. |
 
-Na validação de 23/10/2026, as cinco perguntas foram executadas uma vez com `gemini-3.5-flash-lite`. SQL, linhas retornadas, resposta e visualização foram comparados com as consultas de referência; os cinco resultados foram compatíveis. Na primeira pergunta, três estados empataram com dois clientes; qualquer dois deles completam legitimamente o grupo de cinco. Na quinta, a consulta retornou 38 linhas de mês e canal, exibidas em linhas separadas por canal. Essa execução única confirma o fluxo com um provedor real, mas não mede a taxa de acerto em outras perguntas ou execuções.
+A verificação classifica cada resultado em três casos: a consulta responde à pergunta; a pergunta admite mais de uma leitura e a consulta aplica uma delas, que passa a ser exibida como premissa; ou há um erro objetivo (métrica, filtro, agrupamento ou período), que gera uma consulta adicional. A nova verificação recebe as correções já pedidas. Se o erro persistir, o resultado aparece com a ressalva em vez de ser descartado.
 
-## Limites e próximos passos
+Os dados vão de 22/07/2024 a 22/07/2025. Séries mensais e coortes excluem os meses incompletos (julho de 2024 e julho de 2025); totais e médias usam todos os registros. Em contagens de meses após um evento, o mês do evento é M0, “mês seguinte” é M+1 e “terceiro mês” é M+3. A resposta informa como termos desse tipo foram interpretados.
 
-- A revisão semântica usa o mesmo LLM que gera SQL; uma avaliação com perguntas adicionais e respostas de referência é necessária para medir acerto.
-- A descoberta do esquema percorre o banco a cada pergunta. Cache e seleção de tabelas seriam úteis em bases maiores.
-- O limite de linhas evita respostas excessivas, mas consultas custosas ainda precisam de limite de tempo e controle de recursos.
-- As dependências têm versões mínimas em `requirements.txt`; um arquivo de versões fixas facilitaria repetir o ambiente testado.
+Listas aparecem em tabela, comparações em barras e séries temporais em linhas, com uma linha por categoria quando o resultado tem uma dimensão como canal. A interface avisa quando a consulta excede o limite de linhas.
+
+## Consultas testadas
+
+Os resultados abaixo foram conferidos diretamente no banco e estão nos testes de `desafio_1/tests/test_business_questions.py`. O agente os reproduz com `gemini-3.5-flash-lite`.
+
+| Pergunta | Resultado |
+| --- | --- |
+| Liste os 5 estados com maior número de clientes que compraram via app em maio. | São Paulo 6; Minas Gerais 3; Santa Catarina 3; dois entre Alagoas, Espírito Santo e Paraná, empatados com 2 |
+| Quantos clientes interagiram com campanhas de WhatsApp em 2024? | 17 |
+| Quais categorias de produto tiveram o maior número de compras em média por cliente? | Roupas 2,21; Viagens 2,16; Livros 1,98 |
+| Qual o número de reclamações não resolvidas por canal? | Telefone 19; Chat 18; E-mail 14 |
+| Qual a tendência de reclamações por canal no último ano? | Série mensal por canal, de agosto de 2024 a junho de 2025 |
+| Qual percentual de cada coorte de primeira compra voltou a comprar no mês seguinte e no terceiro mês? | Agosto de 2024: 43 clientes, 37,21% e 60,47%; setembro: 13 clientes, 69,23% e 38,46% |
+
+## Melhorias e extensões
+
+- Usar um modelo mais capaz apenas na verificação e medir o acerto com um conjunto maior de perguntas de referência. Com modelos pequenos, perguntas de várias etapas podem variar entre execuções.
+- Memória de conversa, para perguntas de acompanhamento como “e por estado?”.
+- Cache do esquema e seleção das tabelas relevantes, para bancos maiores.
+- Exportação do resultado em CSV e do gráfico pela interface.
+- Controle de recursos para uso em banco compartilhado, além dos limites de linhas e de tempo.
+- Versões fixas das dependências, para reproduzir o ambiente testado.
