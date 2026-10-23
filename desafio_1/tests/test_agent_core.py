@@ -1,3 +1,4 @@
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -9,6 +10,7 @@ sys.path.insert(0, str(ROOT))
 from agent.db import UnsafeQueryError, run_query, validate_read_only
 from agent.graph import _route_after_execute
 from agent.config import Settings
+from agent.llm import RetryingLLM
 from agent.schema import discover_schema
 
 DB = str(ROOT.parent / "data" / "anexo_desafio_1.db")
@@ -58,4 +60,40 @@ def test_router_erro_tenta_corrigir():
 def test_router_esgotou_tentativas_desiste():
     router = _route_after_execute(_settings(max_attempts=3))
     assert router({"error": "boom", "repair_count": 3}) == "give_up"
+
+def test_consulta_lenta_e_interrompida_pelo_timeout():
+    infinita = "WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r) SELECT MAX(n) FROM r"
+    with pytest.raises(sqlite3.OperationalError, match="excedeu"):
+        run_query(DB, infinita, timeout_s=0.2)
+
+class _FlakyLLM:
+    def __init__(self, failures, error):
+        self.failures = failures
+        self.error = error
+        self.calls = 0
+
+    def invoke(self, messages, **kwargs):
+        self.calls += 1
+        if self.calls <= self.failures:
+            raise self.error
+        return "ok"
+
+def test_retry_repete_erro_de_limite_de_taxa():
+    waits = []
+    flaky = _FlakyLLM(2, RuntimeError("429 RESOURCE_EXHAUSTED"))
+    assert RetryingLLM(flaky, sleep=waits.append).invoke([]) == "ok"
+    assert flaky.calls == 3
+    assert waits == [2.0, 4.0]
+
+def test_retry_nao_repete_outros_erros():
+    flaky = _FlakyLLM(1, ValueError("modelo inexistente"))
+    with pytest.raises(ValueError):
+        RetryingLLM(flaky, sleep=lambda _: None).invoke([])
+    assert flaky.calls == 1
+
+def test_retry_desiste_apos_esgotar_tentativas():
+    flaky = _FlakyLLM(10, RuntimeError("429 Too Many Requests"))
+    with pytest.raises(RuntimeError):
+        RetryingLLM(flaky, attempts=3, sleep=lambda _: None).invoke([])
+    assert flaky.calls == 3
 

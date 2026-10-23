@@ -5,12 +5,12 @@ import re
 import sqlite3
 from typing import Any
 
-from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from . import prompts
 from .config import Settings
 from .db import UnsafeQueryError, run_query, validate_read_only
+from .llm import ChatModel
 from .schema import discover_schema, find_partial_months
 from .state import AgentState
 
@@ -82,7 +82,7 @@ def _partial_month_notes(rows: list[tuple], partial_months: list[str]) -> list[s
     return [f"O banco cobre apenas parte de {months}; os valores desse período "
             "não são comparáveis aos de meses completos."]
 
-def make_nodes(llm: BaseChatModel, settings: Settings) -> dict:
+def make_nodes(llm: ChatModel, settings: Settings) -> dict:
     """Cria os nos com o LLM e as settings injetados (closures)."""
 
     def discover(state: AgentState) -> AgentState:
@@ -147,7 +147,8 @@ def make_nodes(llm: BaseChatModel, settings: Settings) -> dict:
     def execute_sql(state: AgentState) -> AgentState:
         sql = state.get("sql", "")
         try:
-            result = run_query(settings.db_abspath, sql, settings.row_limit)
+            result = run_query(settings.db_abspath, sql, settings.row_limit,
+                               timeout_s=settings.sql_timeout_s)
             return {
                 "result_columns": result.columns,
                 "result_rows": result.rows,

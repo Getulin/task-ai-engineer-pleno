@@ -84,7 +84,11 @@ def main() -> None:
     st.chat_message("user").write(question)
     with st.chat_message("assistant"):
         with st.spinner("Investigando o banco de dados..."):
-            state = agent.invoke({"question": question, "trace": []})
+            try:
+                state = agent.invoke({"question": question, "trace": []})
+            except Exception as exc:
+                st.error(f"Não foi possível concluir a análise: {str(exc)[:300]}")
+                return
 
         st.markdown(state.get("answer", "_Sem resposta._"))
         for assumption in state.get("assumptions") or []:

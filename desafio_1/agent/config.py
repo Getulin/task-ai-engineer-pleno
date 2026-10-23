@@ -18,6 +18,8 @@ class Settings:
     db_path: str
     max_repair_attempts: int
     row_limit: int
+    sql_timeout_s: float = 10.0
+    requests_per_second: float = 0.0
 
     @property
     def db_abspath(self) -> str:
@@ -36,5 +38,7 @@ def get_settings() -> Settings:
         db_path=os.getenv("DB_PATH", "data/anexo_desafio_1.db").strip(),
         max_repair_attempts=int(os.getenv("SQL_MAX_REPAIR_ATTEMPTS", "3")),
         row_limit=int(os.getenv("SQL_ROW_LIMIT", "1000")),
+        sql_timeout_s=float(os.getenv("SQL_TIMEOUT_SECONDS", "10")),
+        requests_per_second=float(os.getenv("LLM_REQUESTS_PER_SECOND", "0")),
     )
 
