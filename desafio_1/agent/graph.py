@@ -20,10 +20,19 @@ def _route_after_execute(settings: Settings):
         return "ok"
     return router
 
-def build_agent(settings: Settings | None = None):
+
+def _route_after_assess(state: AgentState) -> str:
+    if state.get("final_issue"):
+        return "give_up"
+    if state.get("review_needed"):
+        return "review"
+    return "ok"
+
+
+def build_agent(settings: Settings | None = None, llm=None):
     """Compila e devolve o agente (um objeto LangGraph executavel)."""
     settings = settings or get_settings()
-    llm = build_llm(settings)
+    llm = llm or build_llm(settings)
     nodes = make_nodes(llm, settings)
 
     g = StateGraph(AgentState)
@@ -31,6 +40,7 @@ def build_agent(settings: Settings | None = None):
     g.add_node("generate_sql", nodes["generate_sql"])
     g.add_node("execute_sql", nodes["execute_sql"])
     g.add_node("reconsider", nodes["reconsider"])
+    g.add_node("assess_result", nodes["assess_result"])
     g.add_node("decide_viz", nodes["decide_viz"])
     g.add_node("synthesize", nodes["synthesize"])
 
@@ -44,10 +54,15 @@ def build_agent(settings: Settings | None = None):
             "repair": "generate_sql",
             "reconsider": "reconsider",
             "give_up": "synthesize",
-            "ok": "decide_viz",
+            "ok": "assess_result",
         },
     )
     g.add_edge("reconsider", "generate_sql")
+    g.add_conditional_edges(
+        "assess_result",
+        _route_after_assess,
+        {"review": "generate_sql", "give_up": "synthesize", "ok": "decide_viz"},
+    )
     g.add_edge("decide_viz", "synthesize")
     g.add_edge("synthesize", END)
 

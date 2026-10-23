@@ -7,7 +7,7 @@ Dada a pergunta de um diretor e o schema do banco, escreva UMA unica consulta SQ
 Regras importantes:
 - Dialeto SQLite. Use apenas tabelas e colunas que existem no schema abaixo.
 - Preste atencao aos "valores possiveis" de cada coluna e use EXATAMENTE esses
-  valores nos filtros (ex.: canal = 'App', tipo_contato = 'Reclamacao').
+  valores nos filtros (ex.: canal = 'App', tipo_contato = 'Reclamação').
 - Datas sao texto no formato 'YYYY-MM-DD'. Para filtrar por ano/mes use
   strftime('%Y', coluna) ou strftime('%Y-%m', coluna).
 - NAO use date('now')/strftime('now'): os dados sao historicos. Para "ultimo
@@ -58,14 +58,39 @@ Outra causa e grafia diferente num filtro de texto — use exatamente os
 Se, apos revisar, 0 for realmente a resposta correta, devolva a MESMA consulta.
 Caso contrario, devolva a consulta corrigida. Responda SOMENTE com o SQL, sem markdown."""
 
+SQL_REVIEW = """A consulta executou, mas a verificação indicou que ainda não responde
+completamente à pergunta.
+
+Pergunta: {question}
+Consulta anterior: {sql}
+Resultado observado: {result}
+Ponto a corrigir ou investigar: {feedback}
+
+Use o resultado observado quando for necessário para a próxima etapa. Gere uma
+nova consulta SELECT ou WITH que responda à pergunta. Responda somente com SQL."""
+
+ASSESS_SYSTEM = """Verifique se uma consulta SQL e seu resultado respondem à pergunta
+original. Considere a métrica, filtros, agrupamentos, período e granularidade.
+Uma consulta que executou sem erro ainda pode calcular a métrica errada.
+Marque sufficient=true se a consulta já permitir uma resposta factual, inclusive
+quando o resultado vazio for correto. Caso contrário, descreva objetivamente
+qual consulta ou correção falta. Não invente resultados.
+Responda somente JSON: {"sufficient": true, "feedback": ""} ou
+{"sufficient": false, "feedback": "correção necessária"}."""
+
+ASSESS_HUMAN = """Pergunta: {question}
+SQL: {sql}
+Resultado: {result}"""
+
 VIZ_SYSTEM = """Voce escolhe a melhor forma de visualizar o resultado de uma consulta.
 Dada a pergunta e as colunas/amostra do resultado, escolha UM tipo:
 - "table": listas, varias colunas, ou poucos numeros avulsos.
 - "bar": comparacao entre categorias (ex.: contagem por estado/canal/categoria).
 - "line": tendencia ao longo do tempo (eixo x e data/mes/ano).
+Quando houver uma coluna de série, como canal, informe-a em "series".
 
 Responda SOMENTE um JSON valido no formato:
-{{"type": "table|bar|line", "x": "<coluna_eixo_x ou null>", "y": "<coluna_numerica ou null>", "title": "<titulo curto>"}}"""
+{"type": "table|bar|line", "x": "<coluna_eixo_x ou null>", "y": "<coluna_numerica ou null>", "series": "<coluna_serie ou null>", "title": "<titulo curto>"}"""
 
 VIZ_HUMAN = """Pergunta: {question}
 Colunas do resultado: {columns}
@@ -76,6 +101,8 @@ ANSWER_SYSTEM = """Voce e um analista que explica resultados para a diretoria em
 Escreva uma resposta curta, direta e factual baseada APENAS nos dados fornecidos.
 Va direto ao ponto: NAO use saudacoes, vocativos ("Prezado Diretor") nem assinaturas.
 Quando houver varios valores, prefira uma lista objetiva. Nao invente numeros.
+Se o resultado indicar mais linhas do que as mostradas, diga que a resposta
+usa apenas uma amostra e não afirme que a lista está completa.
 Se o resultado estiver vazio, diga que nao ha dados para o filtro informado."""
 
 ANSWER_HUMAN = """Pergunta: {question}

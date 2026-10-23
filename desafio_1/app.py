@@ -30,11 +30,13 @@ def _get_agent():
 def _render_viz(viz: dict, df: pd.DataFrame) -> None:
     vtype = viz.get("type", "table")
     if vtype == "bar" and viz.get("x") and viz.get("y"):
-        st.plotly_chart(px.bar(df, x=viz["x"], y=viz["y"], title=viz.get("title")),
+        st.plotly_chart(px.bar(df, x=viz["x"], y=viz["y"],
+                               color=viz.get("series"), title=viz.get("title")),
                         use_container_width=True)
     elif vtype == "line" and viz.get("x") and viz.get("y"):
         dfx = df.sort_values(viz["x"])
-        st.plotly_chart(px.line(dfx, x=viz["x"], y=viz["y"], title=viz.get("title"),
+        st.plotly_chart(px.line(dfx, x=viz["x"], y=viz["y"],
+                                color=viz.get("series"), title=viz.get("title"),
                                 markers=True), use_container_width=True)
     else:
         st.dataframe(df, use_container_width=True, hide_index=True)
@@ -85,6 +87,11 @@ def main() -> None:
             state = agent.invoke({"question": question, "trace": []})
 
         st.markdown(state.get("answer", "_Sem resposta._"))
+        if state.get("result_truncated"):
+            st.warning(
+                f"A consulta retornou mais de {settings.row_limit} linhas. "
+                "A visualização mostra apenas as primeiras."
+            )
 
         cols = state.get("result_columns") or []
         rows = state.get("result_rows") or []

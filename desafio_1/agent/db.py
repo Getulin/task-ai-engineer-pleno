@@ -18,6 +18,7 @@ class UnsafeQueryError(ValueError):
 class QueryResult:
     columns: list[str]
     rows: list[tuple]
+    truncated: bool = False
 
     @property
     def row_count(self) -> int:
@@ -54,6 +55,8 @@ def run_query(db_path: str, sql: str, row_limit: int = 1000) -> QueryResult:
     Erros de SQL do SQLite sobem como sqlite3.Error para o agente tratar/corrigir.
     """
     clean = validate_read_only(sql)
+    if row_limit < 1:
+        raise ValueError("O limite de linhas deve ser positivo.")
 
     if not Path(db_path).exists():
         raise FileNotFoundError(f"Banco nao encontrado: {db_path}")
@@ -63,9 +66,10 @@ def run_query(db_path: str, sql: str, row_limit: int = 1000) -> QueryResult:
     try:
         cur = conn.cursor()
         cur.execute(clean)
-        rows = cur.fetchmany(row_limit)
+        fetched = cur.fetchmany(row_limit + 1)
+        rows = fetched[:row_limit]
         columns = [d[0] for d in cur.description] if cur.description else []
-        return QueryResult(columns=columns, rows=rows)
+        return QueryResult(columns=columns, rows=rows, truncated=len(fetched) > row_limit)
     finally:
         conn.close()
 
