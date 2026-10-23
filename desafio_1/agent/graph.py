@@ -22,8 +22,6 @@ def _route_after_execute(settings: Settings):
 
 
 def _route_after_assess(state: AgentState) -> str:
-    if state.get("final_issue"):
-        return "give_up"
     if state.get("review_needed"):
         return "review"
     return "ok"
@@ -61,7 +59,7 @@ def build_agent(settings: Settings | None = None, llm=None):
     g.add_conditional_edges(
         "assess_result",
         _route_after_assess,
-        {"review": "generate_sql", "give_up": "synthesize", "ok": "decide_viz"},
+        {"review": "generate_sql", "ok": "decide_viz"},
     )
     g.add_edge("decide_viz", "synthesize")
     g.add_edge("synthesize", END)

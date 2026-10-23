@@ -60,7 +60,7 @@ def main() -> None:
     agent, settings = _get_agent()
 
     with st.sidebar:
-        st.header("⚙️ Configuracao")
+        st.header("Configuracao")
         st.markdown(f"**Provedor:** `{settings.provider}`")
         st.markdown(f"**Modelo:** `{settings.model}`")
         st.markdown(f"**Max. correcoes de SQL:** {settings.max_repair_attempts}")
@@ -70,7 +70,7 @@ def main() -> None:
             if st.button(ex, use_container_width=True):
                 st.session_state["pending_question"] = ex
 
-    st.title("📊 Assistente Virtual de Dados")
+    st.title("Assistente Virtual de Dados")
     st.caption("Pergunte em linguagem natural — eu investigo o banco e respondo com dados.")
 
     question = st.chat_input("Ex.: Quantas reclamacoes nao resolvidas por canal?")
@@ -87,6 +87,12 @@ def main() -> None:
             state = agent.invoke({"question": question, "trace": []})
 
         st.markdown(state.get("answer", "_Sem resposta._"))
+        for assumption in state.get("assumptions") or []:
+            st.info(f"Premissa adotada: {assumption}")
+        if state.get("answer_status") == "unconfirmed":
+            st.warning(f"Resultado não confirmado pela verificação: {state.get('caveat')}")
+        elif state.get("answer_status") == "unverified":
+            st.warning("A verificação automática não pôde ser executada para esta resposta.")
         if state.get("result_truncated"):
             st.warning(
                 f"A consulta retornou mais de {settings.row_limit} linhas. "

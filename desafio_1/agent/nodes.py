@@ -42,6 +42,31 @@ def _append_trace(state: AgentState, step: str, detail: str, data: Any = None) -
     trace.append({"step": step, "detail": detail, "data": data})
     return trace
 
+def _format_history(history: list[dict]) -> str:
+    if not history:
+        return "nenhuma"
+    return json.dumps(
+        [{"consulta": h.get("sql", "")[:1200], "correcao_pedida": h.get("feedback", "")}
+         for h in history],
+        ensure_ascii=False,
+    )
+
+def _parse_assessment(text: str) -> tuple[str, str, str]:
+    """Lê o veredito da verificação; aceita também o formato antigo com "sufficient"."""
+    data = _parse_json(text)
+    verdict = data.get("verdict")
+    if verdict is None and isinstance(data.get("sufficient"), bool):
+        verdict = "ok" if data["sufficient"] else "revise"
+    if verdict not in ("ok", "assumption", "revise"):
+        raise ValueError(f"Veredito inválido: {verdict!r}")
+    feedback = str(data.get("feedback") or "").strip()[:500]
+    assumption = str(data.get("assumption") or "").strip()[:300]
+    if verdict == "assumption" and not assumption:
+        assumption = feedback
+        if not assumption:
+            verdict = "ok"
+    return verdict, feedback, assumption
+
 def make_nodes(llm: BaseChatModel, settings: Settings) -> dict:
     """Cria os nos com o LLM e as settings injetados (closures)."""
 
@@ -51,6 +76,10 @@ def make_nodes(llm: BaseChatModel, settings: Settings) -> dict:
             "schema": schema,
             "repair_count": 0,
             "review_count": 0,
+            "review_history": [],
+            "assumptions": [],
+            "caveat": None,
+            "answer_status": None,
             "trace": _append_trace(
                 state, "descoberta_schema",
                 "Inspecionei o banco dinamicamente (tabelas, colunas e valores reais).",
@@ -63,8 +92,10 @@ def make_nodes(llm: BaseChatModel, settings: Settings) -> dict:
 
         if state.get("review_needed"):
             context = state.get("review_context") or {}
+            history = state.get("review_history") or []
             human = HumanMessage(prompts.SQL_REVIEW.format(
                 question=state["question"],
+                history=_format_history(history[:-1]),
                 sql=context.get("sql", ""),
                 result=json.dumps(context.get("result", {}), ensure_ascii=False),
                 feedback=state.get("review_feedback") or "",
@@ -139,31 +170,53 @@ def make_nodes(llm: BaseChatModel, settings: Settings) -> dict:
             "truncated": state.get("result_truncated", False),
         }
         context = {"sql": state.get("sql", ""), "result": result}
+        history = list(state.get("review_history") or [])
         try:
             messages = [
                 SystemMessage(prompts.ASSESS_SYSTEM),
                 HumanMessage(prompts.ASSESS_HUMAN.format(
                     question=state["question"],
+                    history=_format_history(history),
                     sql=state.get("sql", ""),
                     result=json.dumps(result, ensure_ascii=False),
                 )),
             ]
-            assessment = _parse_json(_text(llm.invoke(messages)))
-            sufficient = assessment.get("sufficient")
-            if not isinstance(sufficient, bool):
-                raise ValueError("A avaliação não trouxe um booleano.")
-            feedback = str(assessment.get("feedback") or "").strip()[:500]
+            verdict, feedback, assumption = _parse_assessment(_text(llm.invoke(messages)))
         except Exception:
-            sufficient, feedback = True, "Avaliação indisponível; consulta mantida."
+            return {
+                "review_needed": False,
+                "answer_status": "unverified",
+                "trace": _append_trace(
+                    state, "verificar_resultado",
+                    "A verificação não pôde ser concluída; a resposta segue sem confirmação.",
+                ),
+            }
 
-        if sufficient:
+        if verdict == "ok":
             return {
                 "review_needed": False,
                 "review_feedback": None,
+                "answer_status": "confirmed",
                 "trace": _append_trace(state, "verificar_resultado",
                                        "A consulta foi considerada suficiente."),
             }
 
+        if verdict == "assumption":
+            assumptions = list(state.get("assumptions") or [])
+            if assumption not in assumptions:
+                assumptions.append(assumption)
+            return {
+                "review_needed": False,
+                "review_feedback": None,
+                "assumptions": assumptions,
+                "answer_status": "assumption",
+                "trace": _append_trace(
+                    state, "verificar_resultado",
+                    "A consulta responde à pergunta sob uma premissa declarada.", assumption,
+                ),
+            }
+
+        history.append({"sql": state.get("sql", ""), "feedback": feedback})
         count = state.get("review_count", 0) + 1
         if count <= _MAX_REVIEW_RETRIES:
             return {
@@ -171,6 +224,7 @@ def make_nodes(llm: BaseChatModel, settings: Settings) -> dict:
                 "review_needed": True,
                 "review_feedback": feedback,
                 "review_context": context,
+                "review_history": history,
                 "trace": _append_trace(
                     state, "verificar_resultado",
                     "A consulta não respondeu completamente à pergunta; nova consulta necessária.",
@@ -180,9 +234,13 @@ def make_nodes(llm: BaseChatModel, settings: Settings) -> dict:
         return {
             "review_count": count,
             "review_needed": False,
-            "final_issue": "Não foi possível confirmar uma resposta confiável após revisar a consulta.",
-            "trace": _append_trace(state, "verificar_resultado",
-                                   "A revisão não encontrou uma consulta suficiente.", feedback),
+            "review_history": history,
+            "answer_status": "unconfirmed",
+            "caveat": feedback or "A verificação não confirmou que a consulta responde à pergunta.",
+            "trace": _append_trace(
+                state, "verificar_resultado",
+                "Revisões esgotadas; o resultado será apresentado com ressalva.", feedback,
+            ),
         }
 
     def decide_viz(state: AgentState) -> AgentState:
@@ -211,11 +269,6 @@ def make_nodes(llm: BaseChatModel, settings: Settings) -> dict:
         }
 
     def synthesize(state: AgentState) -> AgentState:
-        if state.get("final_issue"):
-            return {
-                "answer": state["final_issue"],
-                "trace": _append_trace(state, "resposta", "Resposta não confirmada."),
-            }
         if state.get("error"):
             answer = prompts.ANSWER_FAILURE.format(
                 question=state["question"], error=state.get("error", ""),
@@ -236,6 +289,8 @@ def make_nodes(llm: BaseChatModel, settings: Settings) -> dict:
             HumanMessage(prompts.ANSWER_HUMAN.format(
                 question=state["question"], sql=state.get("sql", ""),
                 result=json.dumps(preview, ensure_ascii=False),
+                assumptions="; ".join(state.get("assumptions") or []) or "nenhuma",
+                caveat=state.get("caveat") or "nenhuma",
             )),
         ]
         answer = _text(llm.invoke(messages))

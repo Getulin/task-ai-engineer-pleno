@@ -1,3 +1,4 @@
+import json
 import math
 import sqlite3
 import sys
@@ -9,6 +10,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from agent import prompts
 from agent.db import UnsafeQueryError, run_query
 from agent.graph import build_agent
 from agent.config import Settings
@@ -153,6 +155,16 @@ class ScriptedLLM:
         return next(self.replies)
 
 
+class RecordingLLM(ScriptedLLM):
+    def __init__(self, replies):
+        super().__init__(replies)
+        self.calls = []
+
+    def invoke(self, messages):
+        self.calls.append(messages)
+        return super().invoke(messages)
+
+
 def _settings():
     return Settings(
         provider="ollama", model="test", temperature=0, ollama_base_url="",
@@ -214,6 +226,70 @@ def test_failed_review_does_not_leave_previous_result_visible():
     assert result["result_columns"] == []
     assert result["result_rows"] == []
     assert result["result_truncated"] is False
+
+
+TABLE_VIZ = '{"type": "table", "x": null, "y": null, "series": null, "title": "Resultado"}'
+
+
+def _ask(llm, question):
+    return build_agent(_settings(), llm=llm).invoke({"question": question, "trace": []})
+
+
+def test_ambiguous_question_is_answered_with_declared_assumption():
+    assumption = "Não resolvidas são as reclamações com resolvido = 0."
+    llm = ScriptedLLM([
+        UNRESOLVED_COMPLAINTS,
+        json.dumps({"verdict": "assumption", "feedback": "", "assumption": assumption}),
+        TABLE_VIZ,
+        "Considerei não resolvidas as reclamações com resolvido = 0.",
+    ])
+    result = _ask(llm, "Qual o numero de reclamacoes nao resolvidas por canal?")
+    assert result["answer_status"] == "assumption"
+    assert result["assumptions"] == [assumption]
+    assert result["result_rows"] == [("Chat", 18), ("E-mail", 14), ("Telefone", 19)]
+    assert [step["step"] for step in result["trace"]].count("executar_sql") == 1
+
+
+def test_unresolved_review_keeps_last_result_and_reports_caveat():
+    llm = ScriptedLLM([
+        "SELECT COUNT(*) AS clientes FROM campanhas_marketing",
+        '{"verdict": "revise", "feedback": "Faltam canal, interação e ano."}',
+        WHATSAPP_2024,
+        '{"verdict": "revise", "feedback": "Confirme se o ano usa a data de envio."}',
+        TABLE_VIZ,
+        "17 clientes, valor não confirmado.",
+    ])
+    result = _ask(llm, "Quantos clientes interagiram com campanhas de WhatsApp em 2024?")
+    assert result["result_rows"] == [(17,)]
+    assert result["answer_status"] == "unconfirmed"
+    assert result["caveat"] == "Confirme se o ano usa a data de envio."
+    assert result["answer"] == "17 clientes, valor não confirmado."
+    assert len(result["review_history"]) == 2
+
+
+def test_second_verification_receives_previous_feedback():
+    feedback = "O terceiro mês deve ser contado como M+2."
+    llm = RecordingLLM([
+        "SELECT COUNT(*) AS clientes FROM clientes",
+        json.dumps({"verdict": "revise", "feedback": feedback}),
+        "SELECT COUNT(DISTINCT cliente_id) AS clientes FROM compras",
+        '{"verdict": "ok", "feedback": ""}',
+        TABLE_VIZ,
+        "100 clientes.",
+    ])
+    result = _ask(llm, "Quantos clientes compraram?")
+    assess_calls = [m for m in llm.calls if m[0].content == prompts.ASSESS_SYSTEM]
+    assert len(assess_calls) == 2
+    assert "Revisões anteriores: nenhuma" in assess_calls[0][1].content
+    assert feedback in assess_calls[1][1].content
+    assert result["answer_status"] == "confirmed"
+
+
+def test_verifier_failure_marks_answer_as_unverified():
+    llm = ScriptedLLM([WHATSAPP_2024, "sem json", TABLE_VIZ, "17 clientes."])
+    result = _ask(llm, "Quantos clientes interagiram com campanhas de WhatsApp em 2024?")
+    assert result["answer_status"] == "unverified"
+    assert result["result_rows"] == [(17,)]
 
 
 def test_multi_channel_trend_keeps_series_when_viz_model_fails():

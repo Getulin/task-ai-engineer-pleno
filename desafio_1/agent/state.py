@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Literal, Optional, TypedDict
 
 VizType = Literal["table", "bar", "line"]
+AnswerStatus = Literal["confirmed", "assumption", "unconfirmed", "unverified"]
 
 class VizSpec(TypedDict):
     type: VizType
@@ -35,7 +36,10 @@ class AgentState(TypedDict, total=False):
     review_needed: bool
     review_feedback: Optional[str]
     review_context: Optional[dict]
-    final_issue: Optional[str]
+    review_history: list[dict]
+    assumptions: list[str]
+    caveat: Optional[str]
+    answer_status: Optional[AnswerStatus]
 
     viz: VizSpec
     answer: str

@@ -62,23 +62,34 @@ SQL_REVIEW = """A consulta executou, mas a verificação indicou que ainda não 
 completamente à pergunta.
 
 Pergunta: {question}
+Revisões anteriores: {history}
 Consulta anterior: {sql}
 Resultado observado: {result}
 Ponto a corrigir ou investigar: {feedback}
 
-Use o resultado observado quando for necessário para a próxima etapa. Gere uma
-nova consulta SELECT ou WITH que responda à pergunta. Responda somente com SQL."""
+Use o resultado observado quando for necessário para a próxima etapa. Mantenha
+as correções já feitas nas revisões anteriores. Gere uma nova consulta SELECT ou
+WITH que responda à pergunta. Responda somente com SQL."""
 
 ASSESS_SYSTEM = """Verifique se uma consulta SQL e seu resultado respondem à pergunta
 original. Considere a métrica, filtros, agrupamentos, período e granularidade.
 Uma consulta que executou sem erro ainda pode calcular a métrica errada.
-Marque sufficient=true se a consulta já permitir uma resposta factual, inclusive
-quando o resultado vazio for correto. Caso contrário, descreva objetivamente
-qual consulta ou correção falta. Não invente resultados.
-Responda somente JSON: {"sufficient": true, "feedback": ""} ou
-{"sufficient": false, "feedback": "correção necessária"}."""
+
+Escolha um veredito:
+- "ok": a consulta responde à pergunta, inclusive quando o resultado vazio é correto.
+- "assumption": a pergunta admite mais de uma leitura razoável (por exemplo, como
+  contar meses ou o que é um período completo) e a consulta aplica uma delas de
+  forma consistente. Descreva a leitura adotada em "assumption", em uma frase.
+- "revise": há um erro objetivo — métrica, filtro, agrupamento, tabela ou período
+  diferente do pedido. Descreva a correção necessária em "feedback".
+
+Não peça revisão apenas para trocar uma leitura razoável por outra. Se houver
+revisões anteriores, não reabra pontos que a consulta atual já corrigiu nem
+contradiga correções pedidas antes. Não invente resultados.
+Responda somente JSON: {"verdict": "ok", "feedback": "", "assumption": ""}"""
 
 ASSESS_HUMAN = """Pergunta: {question}
+Revisões anteriores: {history}
 SQL: {sql}
 Resultado: {result}"""
 
@@ -103,7 +114,10 @@ Va direto ao ponto: NAO use saudacoes, vocativos ("Prezado Diretor") nem assinat
 Quando houver varios valores, prefira uma lista objetiva. Nao invente numeros.
 Se o resultado indicar mais linhas do que as mostradas, diga que a resposta
 usa apenas uma amostra e não afirme que a lista está completa.
-Se o resultado estiver vazio, diga que nao ha dados para o filtro informado."""
+Se o resultado estiver vazio, diga que nao ha dados para o filtro informado.
+Se houver premissas, declare-as em uma frase no início da resposta.
+Se houver ressalva pendente, apresente os números como não confirmados e diga em
+uma frase qual ponto ficou em aberto."""
 
 ANSWER_HUMAN = """Pergunta: {question}
 
@@ -112,6 +126,9 @@ SQL executado:
 
 Resultado (colunas e linhas):
 {result}
+
+Premissas: {assumptions}
+Ressalva pendente: {caveat}
 
 Escreva a resposta para o diretor."""
 
