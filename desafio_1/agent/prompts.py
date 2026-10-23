@@ -13,6 +13,12 @@ Regras importantes:
 - NAO use date('now')/strftime('now'): os dados sao historicos. Para "ultimo
   ano", use os 12 meses anteriores a maior data da tabela relevante, incluindo
   essa data. Calcule o limite a partir de MAX(coluna_de_data), sem datas fixas.
+- O schema indica os meses parciais de cada coluna de data (dados que comecam ou
+  terminam no meio do mes). Em series mensais, tendencias e coortes, exclua esses
+  meses, salvo se a pergunta pedir o contrario: um mes parcial aparenta uma queda
+  que nao existe.
+- Em coortes e retencao, so conte um mes de acompanhamento como observado quando
+  ele estiver completo nos dados.
 - Para perguntas sobre TENDENCIA/evolucao, selecione strftime('%Y-%m', coluna)
   AS mes diretamente, agrupe por esse mes e ordene por ele (serie temporal real).
   Nao use CTEs com datas fixas nem BETWEEN de valores constantes.
@@ -117,7 +123,8 @@ usa apenas uma amostra e não afirme que a lista está completa.
 Se o resultado estiver vazio, diga que nao ha dados para o filtro informado.
 Se houver premissas, declare-as em uma frase no início da resposta.
 Se houver ressalva pendente, apresente os números como não confirmados e diga em
-uma frase qual ponto ficou em aberto."""
+uma frase qual ponto ficou em aberto.
+Se houver observações sobre os dados, mencione-as ao interpretar os valores."""
 
 ANSWER_HUMAN = """Pergunta: {question}
 
@@ -129,6 +136,7 @@ Resultado (colunas e linhas):
 
 Premissas: {assumptions}
 Ressalva pendente: {caveat}
+Observações sobre os dados: {notes}
 
 Escreva a resposta para o diretor."""
 

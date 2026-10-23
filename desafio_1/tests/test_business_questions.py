@@ -14,6 +14,7 @@ from agent import prompts
 from agent.db import UnsafeQueryError, run_query
 from agent.graph import build_agent
 from agent.config import Settings
+from agent.schema import discover_schema, find_partial_months
 
 DB = ROOT.parent / "data" / "anexo_desafio_1.db"
 
@@ -57,6 +58,16 @@ ORDER BY canal
 """
 
 COMPLAINT_TREND = """
+SELECT strftime('%Y-%m', data_contato) AS mes, canal,
+       COUNT(*) AS reclamacoes
+FROM suporte
+WHERE tipo_contato = 'Reclamação'
+  AND data_contato >= '2024-08-01' AND data_contato < '2025-07-01'
+GROUP BY mes, canal
+ORDER BY mes, canal
+"""
+
+COMPLAINT_TREND_WITH_PARTIAL_MONTHS = """
 SELECT strftime('%Y-%m', data_contato) AS mes, canal,
        COUNT(*) AS reclamacoes
 FROM suporte
@@ -106,17 +117,23 @@ def test_unresolved_complaints_by_channel():
     assert run_query(str(DB), UNRESOLVED_COMPLAINTS).rows == expected
 
 
-def test_complaint_trend_uses_latest_data_date_and_keeps_channel_series():
+def test_complaint_trend_uses_complete_months_and_keeps_channel_series():
     rows = _rows(COMPLAINT_TREND)
     assert run_query(str(DB), COMPLAINT_TREND).rows == rows
-    assert rows[0] == ("2024-07", "E-mail", 1)
-    assert rows[-1] == ("2025-07", "Telefone", 2)
-    assert len({month for month, _, _ in rows}) == 13
+    assert rows[0] == ("2024-08", "Chat", 2)
+    assert rows[-1] == ("2025-06", "Telefone", 4)
+    assert len({month for month, _, _ in rows}) == 11
     totals = {
         channel: sum(count for _, current, count in rows if current == channel)
         for channel in {channel for _, channel, _ in rows}
     }
-    assert totals == {"Chat": 34, "E-mail": 28, "Telefone": 35}
+    assert totals == {"Chat": 33, "E-mail": 24, "Telefone": 31}
+
+
+def test_schema_reports_partial_months_at_data_boundaries():
+    assert find_partial_months(str(DB)) == ["2024-07", "2025-07"]
+    schema = discover_schema(str(DB))
+    assert "meses parciais: 2024-07 (a partir do dia 23), 2025-07 (ate o dia 22)" in schema
 
 
 @pytest.mark.parametrize("limit, expected_truncated", [(7, True), (100, False)])
@@ -290,6 +307,24 @@ def test_verifier_failure_marks_answer_as_unverified():
     result = _ask(llm, "Quantos clientes interagiram com campanhas de WhatsApp em 2024?")
     assert result["answer_status"] == "unverified"
     assert result["result_rows"] == [(17,)]
+
+
+def test_result_with_partial_months_carries_a_data_note():
+    llm = ScriptedLLM([
+        COMPLAINT_TREND_WITH_PARTIAL_MONTHS,
+        '{"verdict": "ok", "feedback": ""}',
+        TABLE_VIZ,
+        "Tendência mensal.",
+    ])
+    result = _ask(llm, "Qual a tendência de reclamações por canal no último ano?")
+    assert len(result["data_notes"]) == 1
+    assert "2024-07, 2025-07" in result["data_notes"][0]
+
+
+def test_result_with_complete_months_has_no_data_note():
+    llm = ScriptedLLM([COMPLAINT_TREND, '{"verdict": "ok", "feedback": ""}', TABLE_VIZ, "Tendência."])
+    result = _ask(llm, "Qual a tendência de reclamações por canal no último ano?")
+    assert result["data_notes"] == []
 
 
 def test_multi_channel_trend_keeps_series_when_viz_model_fails():

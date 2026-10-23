@@ -11,10 +11,11 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from . import prompts
 from .config import Settings
 from .db import UnsafeQueryError, run_query, validate_read_only
-from .schema import discover_schema
+from .schema import discover_schema, find_partial_months
 from .state import AgentState
 
 _MAX_REVIEW_RETRIES = 1
+_MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
 
 def _text(response: Any) -> str:
     """Converte o conteudo da resposta do modelo em texto."""
@@ -67,6 +68,20 @@ def _parse_assessment(text: str) -> tuple[str, str, str]:
             verdict = "ok"
     return verdict, feedback, assumption
 
+def _partial_month_notes(rows: list[tuple], partial_months: list[str]) -> list[str]:
+    """Avisa quando o resultado agrega meses que o banco cobre só em parte."""
+    if not partial_months:
+        return []
+    found = sorted({
+        value for row in rows for value in row
+        if isinstance(value, str) and _MONTH_RE.match(value) and value in partial_months
+    })
+    if not found:
+        return []
+    months = ", ".join(found)
+    return [f"O banco cobre apenas parte de {months}; os valores desse período "
+            "não são comparáveis aos de meses completos."]
+
 def make_nodes(llm: BaseChatModel, settings: Settings) -> dict:
     """Cria os nos com o LLM e as settings injetados (closures)."""
 
@@ -74,6 +89,7 @@ def make_nodes(llm: BaseChatModel, settings: Settings) -> dict:
         schema = discover_schema(settings.db_abspath)
         return {
             "schema": schema,
+            "partial_months": find_partial_months(settings.db_abspath),
             "repair_count": 0,
             "review_count": 0,
             "review_history": [],
@@ -278,6 +294,7 @@ def make_nodes(llm: BaseChatModel, settings: Settings) -> dict:
 
         columns = state.get("result_columns", [])
         rows = state.get("result_rows", [])
+        notes = _partial_month_notes(rows, state.get("partial_months") or [])
         preview = {
             "columns": columns,
             "rows": [list(r) for r in rows[:50]],
@@ -291,10 +308,12 @@ def make_nodes(llm: BaseChatModel, settings: Settings) -> dict:
                 result=json.dumps(preview, ensure_ascii=False),
                 assumptions="; ".join(state.get("assumptions") or []) or "nenhuma",
                 caveat=state.get("caveat") or "nenhuma",
+                notes=" ".join(notes) or "nenhuma",
             )),
         ]
         answer = _text(llm.invoke(messages))
         return {"answer": answer,
+                "data_notes": notes,
                 "trace": _append_trace(state, "resposta", "Sintetizei a resposta final em linguagem natural.")}
 
     def reconsider(state: AgentState) -> AgentState:

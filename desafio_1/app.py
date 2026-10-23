@@ -89,6 +89,8 @@ def main() -> None:
         st.markdown(state.get("answer", "_Sem resposta._"))
         for assumption in state.get("assumptions") or []:
             st.info(f"Premissa adotada: {assumption}")
+        for note in state.get("data_notes") or []:
+            st.info(note)
         if state.get("answer_status") == "unconfirmed":
             st.warning(f"Resultado não confirmado pela verificação: {state.get('caveat')}")
         elif state.get("answer_status") == "unverified":

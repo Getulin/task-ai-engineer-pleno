@@ -21,6 +21,7 @@ class AgentState(TypedDict, total=False):
     question: str
 
     schema: str
+    partial_months: list[str]
 
     sql: str
     result_columns: list[str]
@@ -43,6 +44,7 @@ class AgentState(TypedDict, total=False):
 
     viz: VizSpec
     answer: str
+    data_notes: list[str]
 
     trace: list[TraceStep]
 
