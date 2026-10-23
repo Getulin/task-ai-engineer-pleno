@@ -30,6 +30,8 @@ ollama pull qwen2.5-coder:7b
 
 O exemplo usa Ollama em `http://localhost:11434`. Também é possível configurar `LLM_PROVIDER` como `gemini`, `openai` ou `groq` no `.env`, junto com a chave do provedor escolhido. O modelo configurado precisa estar disponível no respectivo serviço.
 
+Para usar o modelo Gemini empregado na validação, configure `LLM_PROVIDER=gemini`, `LLM_MODEL=gemini-3.5-flash-lite` e `GEMINI_API_KEY` no `.env`. O arquivo `.env` é ignorado pelo Git.
+
 ## Fluxo
 
 ```text
@@ -60,7 +62,7 @@ O limite padrão é de 1.000 linhas por consulta. A interface avisa quando a con
 python -m pytest desafio_1/tests -q
 ```
 
-Na revisão desta entrega, **29 testes passaram**. Eles cobrem acesso ao banco, proteção contra escrita, reparo de SQL, revisão de uma consulta válida porém incompleta, visualização por canal e consultas de referência para as cinco perguntas do enunciado. Valores conferidos diretamente no banco:
+Na revisão desta entrega, **30 testes passaram**. Eles cobrem acesso ao banco, proteção contra escrita, reparo de SQL, revisão de uma consulta válida porém incompleta, descarte de resultados antigos após falha, visualização por canal e consultas de referência para as cinco perguntas do enunciado. Valores conferidos diretamente no banco:
 
 | Pergunta | Resultado de referência |
 | --- | --- |
@@ -70,7 +72,7 @@ Na revisão desta entrega, **29 testes passaram**. Eles cobrem acesso ao banco, 
 | Reclamações não resolvidas por canal | Telefone 19; Chat 18; E-mail 14 |
 | Tendência de reclamações por canal no último ano dos dados | Série mensal por canal, de julho de 2024 a julho de 2025 |
 
-Esses valores vêm de consultas SQL de referência usadas nos testes. **Não são uma medição de acerto do LLM** nas cinco perguntas. A execução com um provedor real requer suas credenciais ou um modelo local e deve ser avaliada separadamente.
+Na validação de 23/10/2026, as cinco perguntas foram executadas uma vez com `gemini-3.5-flash-lite`. SQL, linhas retornadas, resposta e visualização foram comparados com as consultas de referência; os cinco resultados foram compatíveis. Na primeira pergunta, três estados empataram com dois clientes; qualquer dois deles completam legitimamente o grupo de cinco. Na quinta, a consulta retornou 38 linhas de mês e canal, exibidas em linhas separadas por canal. Essa execução única confirma o fluxo com um provedor real, mas não mede a taxa de acerto em outras perguntas ou execuções.
 
 ## Limites e próximos passos
 
