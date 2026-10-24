@@ -78,7 +78,7 @@ def find_partial_months(db_path: str) -> list[str]:
 def discover_schema(db_path: str) -> str:
     """Monta uma descricao textual do schema para o prompt do LLM."""
     if not Path(db_path).exists():
-        raise FileNotFoundError(f"Banco nao encontrado: {db_path}")
+        raise FileNotFoundError(f"Banco não encontrado: {db_path}")
 
     conn = _connect_ro(db_path)
     try:

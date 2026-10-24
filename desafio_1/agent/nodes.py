@@ -18,6 +18,7 @@ from .temporal import interpret_question
 _MAX_REVIEW_RETRIES = 1
 _ANSWER_ROWS = 50
 _MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
+_VIZ_LABELS = {"table": "tabela", "bar": "gráfico de barras", "line": "gráfico de linhas"}
 
 def _text(response: Any) -> str:
     """Converte o conteudo da resposta do modelo em texto."""
@@ -131,7 +132,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
         return {
             "answer": state["clarification"],
             "trace": _append_trace(state, "esclarecer_pergunta",
-                                   "A pergunta precisa indicar qual evento define o periodo."),
+                                   "A pergunta precisa indicar qual evento define o período."),
         }
 
     def generate_sql(state: AgentState) -> AgentState:
@@ -158,14 +159,14 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
             human = HumanMessage(prompts.SQL_RECONSIDER_EMPTY.format(
                 question=state["question"], sql=state.get("sql", ""),
             ))
-            detail = f"Resultado vazio: reconsiderando suposicoes (tentativa #{state.get('empty_retries', 0)})."
+            detail = f"Resultado vazio: reconsiderando suposições (tentativa #{state.get('empty_retries', 0)})."
             patch["reconsider_empty"] = False
         elif state.get("error"):
             human = HumanMessage(prompts.SQL_REPAIR.format(
                 question=state["question"], sql=state.get("sql", ""),
                 error=state.get("error", ""),
             ))
-            detail = f"Tentativa de correcao #{state.get('repair_count', 0)} apos erro."
+            detail = f"Tentativa de correção #{state.get('repair_count', 0)} após erro."
         else:
             human = HumanMessage(state["question"])
             detail = "Gerei a consulta SQL inicial a partir da pergunta."
@@ -318,7 +319,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
             "viz": spec,
             "trace": _append_trace(
                 state, "decidir_visualizacao",
-                f"Escolhi exibir como '{spec['type']}'.", spec,
+                f"Escolhi exibir como {_VIZ_LABELS[spec['type']]}.", spec,
             ),
         }
 
@@ -328,7 +329,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
                 question=state["question"], error=state.get("error", ""),
             )
             return {"answer": answer,
-                    "trace": _append_trace(state, "resposta", "Falha apos tentativas de correcao.")}
+                    "trace": _append_trace(state, "resposta", "Falha após tentativas de correção.")}
 
         columns = state.get("result_columns", [])
         rows = state.get("result_rows", [])
@@ -361,7 +362,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
             "empty_retries": state.get("empty_retries", 0) + 1,
             "trace": _append_trace(
                 state, "reflexao_vazio",
-                "Resultado vazio inesperado: vou reconsiderar as suposicoes.",
+                "Resultado vazio inesperado: vou reconsiderar as suposições.",
             ),
         }
 

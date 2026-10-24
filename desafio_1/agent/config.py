@@ -35,7 +35,7 @@ def get_settings() -> Settings:
     if not provider:
         raise RuntimeError(
             "Defina LLM_PROVIDER no .env (ollama | gemini | openai | groq). "
-            "Veja o README para a configuracao de cada provedor."
+            "Veja o README para a configuração de cada provedor."
         )
     if not model:
         raise RuntimeError(

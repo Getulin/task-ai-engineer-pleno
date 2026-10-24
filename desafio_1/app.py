@@ -13,12 +13,24 @@ from agent.config import get_settings
 from agent.graph import build_agent
 
 EXAMPLES = [
-    "Liste os 5 estados com maior numero de clientes que compraram via app em maio.",
+    "Liste os 5 estados com maior número de clientes que compraram via app em maio.",
     "Quantos clientes interagiram com campanhas de WhatsApp em 2024?",
-    "Quais categorias de produto tiveram o maior numero de compras em media por cliente?",
-    "Qual o numero de reclamacoes nao resolvidas por canal?",
-    "Qual a tendencia de reclamacoes por canal no ultimo ano?",
+    "Quais categorias de produto tiveram o maior número de compras em média por cliente?",
+    "Qual o número de reclamações não resolvidas por canal?",
+    "Qual a tendência de reclamações por canal no último ano?",
 ]
+
+TRACE_LABELS = {
+    "descoberta_schema": "Descoberta do esquema",
+    "esclarecer_pergunta": "Esclarecimento da pergunta",
+    "gerar_sql": "Geração do SQL",
+    "executar_sql": "Execução do SQL",
+    "erro_execucao": "Erro de execução",
+    "reflexao_vazio": "Revisão do resultado vazio",
+    "verificar_resultado": "Verificação do resultado",
+    "decidir_visualizacao": "Escolha da visualização",
+    "resposta": "Resposta",
+}
 
 st.set_page_config(page_title="Assistente Virtual de Dados", page_icon="📊", layout="wide")
 
@@ -44,7 +56,8 @@ def _render_viz(viz: dict, df: pd.DataFrame, key: str) -> None:
 def _render_reasoning(state: dict) -> None:
     with st.expander("Etapas e consultas", expanded=False):
         for i, step in enumerate(state.get("trace", []), 1):
-            st.markdown(f"**{i}. {step['step']}** — {step['detail']}")
+            label = TRACE_LABELS.get(step["step"], step["step"])
+            st.markdown(f"**{i}. {label}** — {step['detail']}")
             data = step.get("data")
             if isinstance(data, str) and data.strip().lower().startswith(("select", "with")):
                 st.code(data, language="sql")
@@ -88,10 +101,10 @@ def main() -> None:
         st.stop()
 
     with st.sidebar:
-        st.header("Configuracao")
+        st.header("Configuração")
         st.markdown(f"**Provedor:** `{settings.provider}`")
         st.markdown(f"**Modelo:** `{settings.model}`")
-        st.markdown(f"**Max. correcoes de SQL:** {settings.max_repair_attempts}")
+        st.markdown(f"**Máx. correções de SQL:** {settings.max_repair_attempts}")
         st.divider()
         st.subheader("Exemplos")
         for ex in EXAMPLES:
@@ -110,7 +123,7 @@ def main() -> None:
             else:
                 _render_answer(exchange["state"], settings.row_limit, f"result-{index}")
 
-    question = st.chat_input("Ex.: Quantas reclamacoes nao resolvidas por canal?")
+    question = st.chat_input("Ex.: Quantas reclamações não resolvidas por canal?")
     if "pending_question" in st.session_state:
         question = st.session_state.pop("pending_question")
 

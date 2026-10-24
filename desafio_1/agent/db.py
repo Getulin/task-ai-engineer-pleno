@@ -39,14 +39,14 @@ def validate_read_only(sql: str) -> str:
         raise UnsafeQueryError("Consulta vazia.")
 
     if ";" in clean:
-        raise UnsafeQueryError("Multiplas instrucoes nao sao permitidas.")
+        raise UnsafeQueryError("Múltiplas instruções não são permitidas.")
 
     lowered = clean.lstrip("(").lstrip().lower()
     if not (lowered.startswith("select") or lowered.startswith("with")):
-        raise UnsafeQueryError("Apenas consultas SELECT/WITH sao permitidas.")
+        raise UnsafeQueryError("Apenas consultas SELECT/WITH são permitidas.")
 
     if _FORBIDDEN.search(clean):
-        raise UnsafeQueryError("A consulta contem uma operacao de escrita/DDL proibida.")
+        raise UnsafeQueryError("A consulta contém uma operação de escrita/DDL proibida.")
 
     return clean
 
@@ -62,7 +62,7 @@ def run_query(db_path: str, sql: str, row_limit: int = 1000,
         raise ValueError("O limite de linhas deve ser positivo.")
 
     if not Path(db_path).exists():
-        raise FileNotFoundError(f"Banco nao encontrado: {db_path}")
+        raise FileNotFoundError(f"Banco não encontrado: {db_path}")
 
     uri = f"file:{Path(db_path).as_posix()}?mode=ro"
     conn = sqlite3.connect(uri, uri=True)

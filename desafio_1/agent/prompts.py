@@ -129,26 +129,28 @@ Meses com dados parciais no banco: {partial_months}
 SQL: {sql}
 Resultado: {result}"""
 
-VIZ_SYSTEM = """Voce escolhe a melhor forma de visualizar o resultado de uma consulta.
+VIZ_SYSTEM = """Você escolhe a melhor forma de visualizar o resultado de uma consulta.
 Dada a pergunta e as colunas/amostra do resultado, escolha UM tipo:
-- "table": listas, varias colunas, ou poucos numeros avulsos.
-- "bar": comparacao entre categorias (ex.: contagem por estado/canal/categoria).
-- "line": tendencia ao longo do tempo (eixo x e data/mes/ano).
+- "table": listas, várias colunas, ou poucos números avulsos.
+- "bar": comparação entre categorias (ex.: contagem por estado/canal/categoria).
+- "line": tendência ao longo do tempo (eixo x e data/mês/ano).
 Quando houver uma coluna de série, como canal, informe-a em "series".
+Escreva o título em português brasileiro, com acentuação correta.
 
-Responda SOMENTE um JSON valido no formato:
+Responda SOMENTE um JSON válido no formato:
 {"type": "table|bar|line", "x": "<coluna_eixo_x ou null>", "y": "<coluna_numerica ou null>", "series": "<coluna_serie ou null>", "title": "<titulo curto>"}"""
 
 VIZ_HUMAN = """Pergunta: {question}
 Colunas do resultado: {columns}
-Amostra (ate 5 linhas): {sample}
-Numero de linhas: {n_rows}"""
+Amostra (até 5 linhas): {sample}
+Número de linhas: {n_rows}"""
 
-ANSWER_SYSTEM = """Voce e um analista que explica resultados para a diretoria em portugues.
+ANSWER_SYSTEM = """Você é um analista que explica resultados para a diretoria em português brasileiro.
 Escreva uma resposta curta, direta e factual baseada APENAS nos dados fornecidos.
-Va direto ao ponto: NAO use saudacoes, vocativos ("Prezado Diretor") nem assinaturas.
-Quando houver varios valores, prefira uma lista objetiva. Nao invente numeros.
-Se o resultado estiver vazio, diga que nao ha dados para o filtro informado.
+Use acentuação correta na resposta.
+Vá direto ao ponto: NÃO use saudações, vocativos ("Prezado Diretor") nem assinaturas.
+Quando houver vários valores, prefira uma lista objetiva. Não invente números.
+Se o resultado estiver vazio, diga que não há dados para o filtro informado.
 Se houver premissas, declare-as em uma frase no início da resposta.
 Se houver ressalva pendente, apresente os números como não confirmados e diga em
 uma frase qual ponto ficou em aberto.
@@ -175,6 +177,6 @@ Escreva a resposta para o diretor."""
 ANSWER_SAMPLE_NOTE = """O resultado tem mais linhas do que as mostradas: diga que a resposta
 usa uma amostra e não afirme que a lista está completa."""
 
-ANSWER_FAILURE = """Nao foi possivel responder "{question}" porque a consulta ao banco
-falhou mesmo apos varias tentativas de correcao. Ultimo erro: {error}"""
+ANSWER_FAILURE = """Não foi possível responder "{question}" porque a consulta ao banco
+falhou mesmo após várias tentativas de correção. Último erro: {error}"""
 
