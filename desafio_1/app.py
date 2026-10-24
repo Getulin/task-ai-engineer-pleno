@@ -56,6 +56,30 @@ def _render_reasoning(state: dict) -> None:
             st.markdown("**SQL final executado:**")
             st.code(state["sql"], language="sql")
 
+def _render_answer(state: dict, row_limit: int) -> None:
+    st.markdown(state.get("answer", "_Sem resposta._"))
+    for assumption in state.get("assumptions") or []:
+        st.info(f"Premissa adotada: {assumption}")
+    for note in state.get("data_notes") or []:
+        st.info(note)
+    if state.get("answer_status") == "unconfirmed":
+        st.warning(f"Resultado não confirmado pela verificação: {state.get('caveat')}")
+    elif state.get("answer_status") == "unverified":
+        st.warning("A verificação automática não pôde ser executada para esta resposta.")
+    if state.get("result_truncated"):
+        st.warning(
+            f"A consulta retornou mais de {row_limit} linhas. "
+            "A visualização mostra apenas as primeiras."
+        )
+
+    cols = state.get("result_columns") or []
+    rows = state.get("result_rows") or []
+    if cols and rows:
+        df = pd.DataFrame(rows, columns=cols)
+        _render_viz(state.get("viz", {"type": "table"}), df)
+
+    _render_reasoning(state)
+
 def main() -> None:
     try:
         agent, settings = _get_agent()
@@ -77,12 +101,22 @@ def main() -> None:
     st.title("Assistente Virtual de Dados")
     st.caption("Pergunte em linguagem natural — eu investigo o banco e respondo com dados.")
 
+    history = st.session_state.setdefault("history", [])
+    for exchange in history:
+        st.chat_message("user").write(exchange["question"])
+        with st.chat_message("assistant"):
+            if "error" in exchange:
+                st.error(exchange["error"])
+            else:
+                _render_answer(exchange["state"], settings.row_limit)
+
     question = st.chat_input("Ex.: Quantas reclamacoes nao resolvidas por canal?")
     if "pending_question" in st.session_state:
         question = st.session_state.pop("pending_question")
 
     if not question:
-        st.info("Digite uma pergunta ou escolha um exemplo na barra lateral.")
+        if not history:
+            st.info("Digite uma pergunta ou escolha um exemplo na barra lateral.")
         return
 
     st.chat_message("user").write(question)
@@ -91,31 +125,13 @@ def main() -> None:
             try:
                 state = agent.invoke({"question": question, "trace": []})
             except Exception as exc:
-                st.error(f"Não foi possível concluir a análise: {str(exc)[:300]}")
+                error = f"Não foi possível concluir a análise: {str(exc)[:300]}"
+                st.error(error)
+                history.append({"question": question, "error": error})
                 return
 
-        st.markdown(state.get("answer", "_Sem resposta._"))
-        for assumption in state.get("assumptions") or []:
-            st.info(f"Premissa adotada: {assumption}")
-        for note in state.get("data_notes") or []:
-            st.info(note)
-        if state.get("answer_status") == "unconfirmed":
-            st.warning(f"Resultado não confirmado pela verificação: {state.get('caveat')}")
-        elif state.get("answer_status") == "unverified":
-            st.warning("A verificação automática não pôde ser executada para esta resposta.")
-        if state.get("result_truncated"):
-            st.warning(
-                f"A consulta retornou mais de {settings.row_limit} linhas. "
-                "A visualização mostra apenas as primeiras."
-            )
-
-        cols = state.get("result_columns") or []
-        rows = state.get("result_rows") or []
-        if cols and rows:
-            df = pd.DataFrame(rows, columns=cols)
-            _render_viz(state.get("viz", {"type": "table"}), df)
-
-        _render_reasoning(state)
+        _render_answer(state, settings.row_limit)
+    history.append({"question": question, "state": state})
 
 if __name__ == "__main__":
     main()
