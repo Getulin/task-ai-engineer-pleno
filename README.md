@@ -92,6 +92,11 @@ Os resultados abaixo foram conferidos diretamente no banco e estão nos testes d
 | Qual o número de reclamações não resolvidas por canal? | Telefone 19; Chat 18; E-mail 14 |
 | Qual a tendência de reclamações por canal no último ano? | Série mensal por canal, de agosto de 2024 a junho de 2025 |
 | Qual percentual de cada coorte de primeira compra voltou a comprar no mês seguinte e no terceiro mês? | Agosto de 2024: 43 clientes, 37,21% e 60,47%; setembro: 13 clientes, 69,23% e 38,46% |
+| Quantos clientes efetuaram pagamentos pelo app em setembro? | 22 clientes distintos com compras via App. O filtro abrange todos os setembros; o banco contém apenas setembro de 2024. |
+| Qual a campanha com a maior adesão de clientes? | Black Friday, com 32 clientes distintos que interagiram. |
+| Qual a campanha com a maior adesão de clientes, e quantos clientes foram? | Black Friday, 32 clientes distintos que interagiram. |
+
+Na primeira pergunta, `compras` é usada como aproximação de “pagamentos”, pois o banco não registra pagamentos separadamente. Nas duas últimas, adesão significa quantidade de clientes distintos com `interagiu = 1`. Se medida como proporção dos clientes alcançados, Black Friday também lidera: 32 de 45 (71,11%).
 
 ## Melhorias e extensões
 
