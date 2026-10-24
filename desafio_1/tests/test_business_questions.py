@@ -345,6 +345,19 @@ def test_cohort_months_report_only_the_adjacent_partial_month():
     ]
 
 
+def _answer_prompt(llm):
+    return next(m for m in llm.calls if m[0].content == prompts.ANSWER_SYSTEM)[1].content
+
+
+def test_answer_mentions_sample_only_when_result_exceeds_shown_rows():
+    small = RecordingLLM([UNRESOLVED_COMPLAINTS, '{"verdict": "ok", "feedback": ""}', TABLE_VIZ, "Resposta."])
+    _ask(small, "Qual o numero de reclamacoes nao resolvidas por canal?")
+    large = RecordingLLM(["SELECT id, nome FROM clientes", '{"verdict": "ok", "feedback": ""}', TABLE_VIZ, "Resposta."])
+    _ask(large, "Liste os clientes.")
+    assert prompts.ANSWER_SAMPLE_NOTE not in _answer_prompt(small)
+    assert prompts.ANSWER_SAMPLE_NOTE in _answer_prompt(large)
+
+
 def test_multi_channel_trend_keeps_series_when_viz_model_fails():
     llm = ScriptedLLM([
         COMPLAINT_TREND,

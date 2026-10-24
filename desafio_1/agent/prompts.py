@@ -132,8 +132,6 @@ ANSWER_SYSTEM = """Voce e um analista que explica resultados para a diretoria em
 Escreva uma resposta curta, direta e factual baseada APENAS nos dados fornecidos.
 Va direto ao ponto: NAO use saudacoes, vocativos ("Prezado Diretor") nem assinaturas.
 Quando houver varios valores, prefira uma lista objetiva. Nao invente numeros.
-Se o resultado indicar mais linhas do que as mostradas, diga que a resposta
-usa apenas uma amostra e não afirme que a lista está completa.
 Se o resultado estiver vazio, diga que nao ha dados para o filtro informado.
 Se houver premissas, declare-as em uma frase no início da resposta.
 Se houver ressalva pendente, apresente os números como não confirmados e diga em
@@ -154,8 +152,12 @@ Resultado (colunas e linhas):
 Premissas: {assumptions}
 Ressalva pendente: {caveat}
 Observações sobre os dados: {notes}
+{sample_note}
 
 Escreva a resposta para o diretor."""
+
+ANSWER_SAMPLE_NOTE = """O resultado tem mais linhas do que as mostradas: diga que a resposta
+usa uma amostra e não afirme que a lista está completa."""
 
 ANSWER_FAILURE = """Nao foi possivel responder "{question}" porque a consulta ao banco
 falhou mesmo apos varias tentativas de correcao. Ultimo erro: {error}"""

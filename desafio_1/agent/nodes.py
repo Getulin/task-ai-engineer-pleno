@@ -15,6 +15,7 @@ from .schema import discover_schema, find_partial_months
 from .state import AgentState
 
 _MAX_REVIEW_RETRIES = 1
+_ANSWER_ROWS = 50
 _MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
 
 def _text(response: Any) -> str:
@@ -312,11 +313,11 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
         columns = state.get("result_columns", [])
         rows = state.get("result_rows", [])
         notes = _partial_month_notes(columns, rows, state.get("partial_months") or [])
+        partial = len(rows) > _ANSWER_ROWS or state.get("result_truncated", False)
         preview = {
             "columns": columns,
-            "rows": [list(r) for r in rows[:50]],
+            "rows": [list(r) for r in rows[:_ANSWER_ROWS]],
             "loaded_rows": len(rows),
-            "more_rows": len(rows) > 50 or state.get("result_truncated", False),
         }
         messages = [
             SystemMessage(prompts.ANSWER_SYSTEM),
@@ -326,6 +327,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
                 assumptions="; ".join(state.get("assumptions") or []) or "nenhuma",
                 caveat=state.get("caveat") or "nenhuma",
                 notes=" ".join(notes) or "nenhuma",
+                sample_note=prompts.ANSWER_SAMPLE_NOTE if partial else "",
             )),
         ]
         answer = _text(llm.invoke(messages))
