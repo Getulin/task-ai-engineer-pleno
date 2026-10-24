@@ -30,28 +30,35 @@ cp .env.example .env
 
 ### Configuração
 
-O `.env` define o provedor e os limites e é ignorado pelo Git. `LLM_PROVIDER` e `LLM_MODEL` são obrigatórios.
+O `.env` define o provedor, o modelo e os limites e é ignorado pelo Git. `LLM_PROVIDER` e `LLM_MODEL` são obrigatórios. Para provedores remotos, inclua também a chave correspondente. O banco já está no repositório; `DB_PATH` só precisa ser alterado se você usar outro arquivo.
 
 | Variável | Uso |
 | --- | --- |
 | `LLM_PROVIDER` | `ollama`, `gemini`, `openai` ou `groq` |
 | `LLM_MODEL` | Modelo do provedor escolhido |
+| `LLM_TEMPERATURE` | Temperatura solicitada ao modelo (padrão: `0`; alguns modelos ignoram esse parâmetro) |
 | `OLLAMA_BASE_URL` | Endereço do Ollama quando `LLM_PROVIDER=ollama`; veja [docs/ollama.md](docs/ollama.md) |
 | `GEMINI_API_KEY`, `OPENAI_API_KEY`, `GROQ_API_KEY` | Chave do provedor escolhido |
-| `LLM_REQUESTS_PER_SECOND` | Limite de requisições ao provedor; `0.2` na camada gratuita do Gemini |
+| `DB_PATH` | Caminho do SQLite, relativo à raiz do projeto ou absoluto (padrão: `data/anexo_desafio_1.db`) |
+| `LLM_REQUESTS_PER_SECOND` | Limite local de chamadas ao modelo; `0` desativa. Ajuste conforme a cota da sua conta. |
+| `SQL_MAX_REPAIR_ATTEMPTS` | Número máximo de execuções com erro antes de desistir (padrão: `3`) |
 | `SQL_ROW_LIMIT`, `SQL_TIMEOUT_SECONDS` | Limites por consulta (padrão: 1.000 linhas e 10 s) |
 
 ### Testes
 
-```bash
-python -m pytest desafio_1/tests -q
+```powershell
+.\.venv\Scripts\python -m pytest desafio_1/tests -q
 ```
+
+No Linux ou macOS, use `.venv/bin/python -m pytest desafio_1/tests -q`.
 
 ## Fluxo e arquitetura
 
 ```text
 pergunta
   → descoberta de tabelas, colunas, relações e valores do SQLite
+  → interpretação do período citado
+     └─ "clientes em um mês" sem evento definido: pede esclarecimento
   → geração e execução de SQL
      ├─ erro de SQL: nova tentativa com a mensagem de erro
      └─ resultado vazio: uma reconsideração dos filtros
@@ -66,43 +73,45 @@ O agente é um grafo de estados em LangGraph (`desafio_1/agent/graph.py`). O gra
 
 | Módulo | Responsabilidade |
 | --- | --- |
-| `schema.py` | Lê o esquema em tempo de execução: tabelas, colunas, relações, valores de colunas de baixa cardinalidade, intervalos de datas e meses cobertos só em parte. Exemplos de nomes e contatos pessoais são omitidos do contexto do modelo. Nenhuma consulta é fixa no código. |
+| `schema.py` | Lê o esquema em tempo de execução: tabelas, colunas, relações, valores de colunas de baixa cardinalidade, intervalos de datas e meses cobertos só em parte. Exemplos de colunas pessoais reconhecidas são omitidos do contexto do modelo. |
+| `temporal.py` | Interpreta os meses citados na pergunta e identifica quando falta definir o evento que associa clientes a um mês. |
 | `db.py` | Executa uma instrução `SELECT` ou `WITH` por vez, em conexão somente leitura, com limite de linhas e de tempo. |
 | `nodes.py` | Gera, executa, corrige e verifica o SQL; escolhe a visualização e redige a resposta. |
 | `llm.py` | Cria o modelo do provedor configurado e repete chamadas recusadas por limite de taxa. |
-| `app.py` | Interface Streamlit com resposta, gráfico, avisos e a seção “Etapas e consultas”. |
+| `app.py` | Interface Streamlit com resposta, gráfico, avisos, histórico visual da sessão e a seção “Etapas e consultas”. |
 
 A verificação classifica cada resultado em três casos: a consulta responde à pergunta; a pergunta admite mais de uma leitura e a consulta aplica uma delas, que passa a ser exibida como premissa; ou há um erro objetivo (métrica, filtro, agrupamento ou período), que gera uma consulta adicional. A nova verificação recebe as correções já pedidas. Se o erro persistir, o resultado aparece com a ressalva em vez de ser descartado.
 
-Valores de colunas pessoais são ocultados nas amostras de resultados enviadas ao modelo. A tabela exibida localmente mantém os valores originais.
+As consultas de negócio do agente são geradas em tempo de execução. O código usa SQL fixo para inspecionar o esquema, e os testes contêm consultas de referência. O agente omite exemplos de colunas pessoais reconhecidas no esquema e mascara resultados quando o nome da coluna é reconhecido como pessoal. Esse filtro baseado em nomes não cobre aliases ou expressões que incluam dados pessoais. A tabela exibida localmente mantém os valores originais.
 
-Os dados vão de 22/07/2024 a 22/07/2025. Séries mensais e coortes excluem os meses incompletos (julho de 2024 e julho de 2025); totais e médias usam todos os registros. Em contagens de meses após um evento, o mês do evento é M0, “mês seguinte” é M+1 e “terceiro mês” é M+3. A resposta informa como termos desse tipo foram interpretados.
+As datas do banco vão, em conjunto, de 22/07/2024 a 22/07/2025; o intervalo varia entre as tabelas. O agente recebe a orientação de excluir meses incompletos de séries mensais e coortes (julho de 2024 e julho de 2025) e de incluir todos os registros em totais e médias. Um mês citado pelo nome sem ano abrange todas as ocorrências desse mês nos anos disponíveis; “mais recente” ou um ano explícito alteram esse recorte. Em contagens após um evento, o mês do evento é M0, “mês seguinte” é M+1 e “terceiro mês” é M+3. O verificador confere o SQL gerado, mas a correção da resposta ainda depende do modelo.
 
-Listas aparecem em tabela, comparações em barras e séries temporais em linhas, com uma linha por categoria quando o resultado tem uma dimensão como canal. A interface avisa quando a consulta excede o limite de linhas.
+O agente escolhe entre tabela, barras e linhas conforme a pergunta e as colunas retornadas. A interface avisa quando a consulta excede o limite de linhas. O histórico mantém perguntas e resultados visíveis durante a sessão, mas uma nova pergunta não recebe as anteriores como contexto.
 
 ## Consultas testadas
 
-Os resultados abaixo foram conferidos diretamente no banco e estão nos testes de `desafio_1/tests/test_business_questions.py`. O agente os reproduz com `gemini-3.5-flash-lite`.
+Os valores abaixo são referências conferidas com consultas SQL ao banco. `desafio_1/tests/test_business_questions.py` cobre parte dessas métricas; outras foram verificadas manualmente. O SQL produzido pelo modelo pode variar entre execuções, então a tabela não garante que toda resposta do agente repetirá exatamente estes valores.
 
 | Pergunta | Resultado |
 | --- | --- |
-| Liste os 5 estados com maior número de clientes que compraram via app em maio. | São Paulo 6; Minas Gerais 3; Santa Catarina 3; dois entre Alagoas, Espírito Santo e Paraná, empatados com 2 |
+| Liste os 5 estados com maior número de clientes que compraram via app em maio. | São Paulo 6; Minas Gerais 3; Santa Catarina 3; Alagoas 2; Espírito Santo 2. Paraná também tem 2 e fica fora pelo desempate alfabético usado na consulta de referência. |
 | Quantos clientes interagiram com campanhas de WhatsApp em 2024? | 17 |
 | Quais categorias de produto tiveram o maior número de compras em média por cliente? | Roupas 2,21; Viagens 2,16; Livros 1,98 |
 | Qual o número de reclamações não resolvidas por canal? | Telefone 19; Chat 18; E-mail 14 |
-| Qual a tendência de reclamações por canal no último ano? | Série mensal por canal, de agosto de 2024 a junho de 2025 |
+| Qual a tendência de reclamações por canal no último ano? | Série mensal por canal, com 11 meses completos de agosto de 2024 a junho de 2025 |
 | Qual percentual de cada coorte de primeira compra voltou a comprar no mês seguinte e no terceiro mês? | Agosto de 2024: 43 clientes, 37,21% e 60,47%; setembro: 13 clientes, 69,23% e 38,46% |
 | Quantos clientes efetuaram pagamentos pelo app em setembro? | 22 clientes distintos com compras via App. O filtro abrange todos os setembros; o banco contém apenas setembro de 2024. |
 | Qual a campanha com a maior adesão de clientes? | Black Friday, com 32 clientes distintos que interagiram. |
 | Qual a campanha com a maior adesão de clientes, e quantos clientes foram? | Black Friday, 32 clientes distintos que interagiram. |
 
-Na primeira pergunta, `compras` é usada como aproximação de “pagamentos”, pois o banco não registra pagamentos separadamente. Nas duas últimas, adesão significa quantidade de clientes distintos com `interagiu = 1`. Se medida como proporção dos clientes alcançados, Black Friday também lidera: 32 de 45 (71,11%).
+Na pergunta sobre pagamentos, `compras` é usada como aproximação, pois o banco não registra pagamentos separadamente. Nas duas últimas, adesão significa quantidade de clientes distintos com `interagiu = 1`. Se medida como proporção dos clientes alcançados, Black Friday também lidera: 32 de 45 (71,11%).
 
 ## Melhorias e extensões
 
 - Usar um modelo mais capaz apenas na verificação e medir o acerto com um conjunto maior de perguntas de referência. Com modelos pequenos, perguntas de várias etapas podem variar entre execuções.
-- Memória de conversa, para perguntas de acompanhamento como “e por estado?”.
+- Memória contextual de conversa, para perguntas de acompanhamento como “e por estado?”. O histórico atual é apenas visual.
 - Cache do esquema e seleção das tabelas relevantes, para bancos maiores.
-- Exportação do resultado em CSV e do gráfico pela interface.
+- Aplicar de forma determinística o tipo de visualização quando o usuário pedir tabela ou gráfico específico.
+- Exportação do resultado completo, além do limite de linhas carregadas na interface. Os controles atuais permitem baixar os dados carregados na tabela e a imagem do gráfico.
 - Controle de recursos para uso em banco compartilhado, além dos limites de linhas e de tempo.
 - Versões fixas das dependências, para reproduzir o ambiente testado.
