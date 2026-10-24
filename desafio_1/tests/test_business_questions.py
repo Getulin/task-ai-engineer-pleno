@@ -344,6 +344,24 @@ def test_second_verification_receives_previous_feedback():
     assert result["answer_status"] == "confirmed"
 
 
+def test_month_scope_is_shared_by_generation_review_and_verification():
+    llm = RecordingLLM([
+        "SELECT estado, COUNT(*) AS clientes FROM clientes GROUP BY estado",
+        '{"verdict": "revise", "feedback": "Falta filtrar compras pelo App em maio."}',
+        MAY_APP_STATES,
+        '{"verdict": "ok", "feedback": ""}',
+        TABLE_VIZ,
+        "Resultado por estado.",
+    ])
+    result = _ask(llm, "Liste os 5 estados com mais clientes que compraram pelo App em maio")
+    assert result["answer_status"] == "confirmed"
+    assert result["result_rows"] == _rows(MAY_APP_STATES)
+    for messages in llm.calls[:4]:
+        content = "\n".join(message.content for message in messages)
+        assert "05" in content
+        assert "todos os anos" in content.lower()
+
+
 def test_verifier_failure_marks_answer_as_unverified():
     llm = ScriptedLLM([WHATSAPP_2024, "sem json", TABLE_VIZ, "17 clientes."])
     result = _ask(llm, "Quantos clientes interagiram com campanhas de WhatsApp em 2024?")

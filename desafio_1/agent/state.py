@@ -22,6 +22,8 @@ class AgentState(TypedDict, total=False):
 
     schema: str
     partial_months: list[str]
+    temporal_guidance: str
+    clarification: Optional[str]
 
     sql: str
     result_columns: list[str]

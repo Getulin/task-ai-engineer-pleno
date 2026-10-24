@@ -28,10 +28,18 @@ Regras importantes:
 - Se um MES for citado SEM o ano (ex.: "em maio"), filtre apenas pelo mes com
   strftime('%m', coluna) = '05' para abranger todos os anos — NAO fixe um ano
   que pode nao ter dados.
+- Use a coluna de data do evento pedido: compras em data_compra, campanhas em
+  data_envio e suporte em data_contato. data_ultima_compra em clientes representa
+  somente a ultima compra de cada pessoa e nao mede participacao em meses passados.
+- Quando a metrica e numero de clientes, conte IDs de clientes distintos, nao
+  linhas de compras, campanhas ou contatos. Se a pergunta incluir categorias sem
+  ocorrencias, preserve-as com LEFT JOIN e aplique os filtros do evento no ON.
 - Colunas booleanas (resolvido, interagiu) usam 0/1. "nao resolvido" = resolvido = 0.
 - Faca os JOINs necessarios pelas chaves estrangeiras indicadas.
 - Nao invente colunas. Nao escreva comandos de escrita (INSERT/UPDATE/DELETE/DDL).
 - Responda SOMENTE com o SQL puro, sem explicacao e sem cercas de markdown.
+
+Interpretacao temporal desta pergunta: {temporal_guidance}
 
 Schema do banco:
 {schema}
@@ -71,6 +79,7 @@ SQL_REVIEW = """A consulta executou, mas a verificação indicou que ainda não 
 completamente à pergunta.
 
 Pergunta: {question}
+Interpretacao temporal obrigatoria: {temporal_guidance}
 Revisões anteriores: {history}
 Consulta anterior: {sql}
 Resultado observado: {result}
@@ -100,6 +109,12 @@ revisões anteriores, não reabra pontos que a consulta atual já corrigiu nem
 contradiga correções pedidas antes. Não invente resultados.
 
 Convenções já adotadas pelo sistema, que não são erro:
+- Mês citado sem ano abrange todas as ocorrências desse mês nos anos disponíveis.
+  Não assuma o último ano. Se o ano ou "mais recente" for explícito, respeite-o.
+- A data deve corresponder ao evento pedido. data_ultima_compra não substitui
+  data_compra para descobrir quem comprou em um mês histórico.
+- Número de clientes exige IDs distintos de clientes; COUNT(*) sobre compras,
+  campanhas ou contatos mede eventos, não pessoas.
 - Contagem de meses após um evento: o mês do evento é M0, "mês seguinte" é M+1 e
   "terceiro mês" é M+3, salvo se a pergunta definir outra contagem.
 - Meses com dados parciais ficam fora de resultados agrupados por mês e de
@@ -108,6 +123,7 @@ Convenções já adotadas pelo sistema, que não são erro:
 Responda somente JSON: {"verdict": "ok", "feedback": "", "assumption": ""}"""
 
 ASSESS_HUMAN = """Pergunta: {question}
+Interpretação temporal obrigatória: {temporal_guidance}
 Revisões anteriores: {history}
 Meses com dados parciais no banco: {partial_months}
 SQL: {sql}

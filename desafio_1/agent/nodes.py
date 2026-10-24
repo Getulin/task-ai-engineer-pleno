@@ -13,6 +13,7 @@ from .db import UnsafeQueryError, run_query, validate_read_only
 from .llm import ChatModel
 from .schema import discover_schema, find_partial_months, is_personal_column
 from .state import AgentState
+from .temporal import interpret_question
 
 _MAX_REVIEW_RETRIES = 1
 _ANSWER_ROWS = 50
@@ -108,13 +109,16 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
 
     def discover(state: AgentState) -> AgentState:
         schema = discover_schema(settings.db_abspath)
+        temporal = interpret_question(state["question"])
         return {
             "schema": schema,
             "partial_months": find_partial_months(settings.db_abspath),
+            "temporal_guidance": temporal.guidance,
+            "clarification": temporal.clarification,
             "repair_count": 0,
             "review_count": 0,
             "review_history": [],
-            "assumptions": [],
+            "assumptions": [temporal.assumption] if temporal.assumption else [],
             "caveat": None,
             "answer_status": None,
             "trace": _append_trace(
@@ -123,8 +127,17 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
             ),
         }
 
+    def clarify(state: AgentState) -> AgentState:
+        return {
+            "answer": state["clarification"],
+            "trace": _append_trace(state, "esclarecer_pergunta",
+                                   "A pergunta precisa indicar qual evento define o periodo."),
+        }
+
     def generate_sql(state: AgentState) -> AgentState:
-        system = SystemMessage(prompts.SQL_SYSTEM.format(schema=state["schema"]))
+        system = SystemMessage(prompts.SQL_SYSTEM.format(
+            schema=state["schema"], temporal_guidance=state["temporal_guidance"],
+        ))
         patch: dict = {}
 
         if state.get("review_needed"):
@@ -132,6 +145,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
             history = state.get("review_history") or []
             human = HumanMessage(prompts.SQL_REVIEW.format(
                 question=state["question"],
+                temporal_guidance=state["temporal_guidance"],
                 history=_format_history(history[:-1]),
                 sql=context.get("sql", ""),
                 result=json.dumps(context.get("result", {}), ensure_ascii=False),
@@ -214,6 +228,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
                 SystemMessage(prompts.ASSESS_SYSTEM),
                 HumanMessage(prompts.ASSESS_HUMAN.format(
                     question=state["question"],
+                    temporal_guidance=state["temporal_guidance"],
                     history=_format_history(history),
                     partial_months=", ".join(state.get("partial_months") or []) or "nenhum",
                     sql=state.get("sql", ""),
@@ -352,6 +367,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
 
     return {
         "discover": discover,
+        "clarify": clarify,
         "generate_sql": generate_sql,
         "execute_sql": execute_sql,
         "reconsider": reconsider,

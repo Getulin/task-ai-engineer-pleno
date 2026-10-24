@@ -35,6 +35,7 @@ def build_agent(settings: Settings | None = None, llm=None):
 
     g = StateGraph(AgentState)
     g.add_node("discover", nodes["discover"])
+    g.add_node("clarify", nodes["clarify"])
     g.add_node("generate_sql", nodes["generate_sql"])
     g.add_node("execute_sql", nodes["execute_sql"])
     g.add_node("reconsider", nodes["reconsider"])
@@ -43,7 +44,12 @@ def build_agent(settings: Settings | None = None, llm=None):
     g.add_node("synthesize", nodes["synthesize"])
 
     g.add_edge(START, "discover")
-    g.add_edge("discover", "generate_sql")
+    g.add_conditional_edges(
+        "discover",
+        lambda state: "clarify" if state.get("clarification") else "generate",
+        {"clarify": "clarify", "generate": "generate_sql"},
+    )
+    g.add_edge("clarify", END)
     g.add_edge("generate_sql", "execute_sql")
     g.add_conditional_edges(
         "execute_sql",
