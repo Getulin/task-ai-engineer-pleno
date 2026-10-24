@@ -6,7 +6,7 @@ Este repositório implementa o **Desafio 1**. O Desafio 2 não faz parte da entr
 
 ## Execução
 
-Requer Python 3.11 ou superior. A configuração padrão também requer Ollama instalado. O banco de exemplo está em `data/anexo_desafio_1.db`.
+Requer Python 3.11 ou superior. O banco de exemplo está em `data/anexo_desafio_1.db`. Antes de rodar, defina o provedor de LLM no `.env` (veja [Configuração](#configuração)). Para rodar localmente sem chave de API, veja [docs/ollama.md](docs/ollama.md).
 
 ### Windows (PowerShell)
 
@@ -14,7 +14,7 @@ Requer Python 3.11 ou superior. A configuração padrão também requer Ollama i
 python -m venv .venv
 .\.venv\Scripts\python -m pip install -r requirements.txt
 Copy-Item .env.example .env
-ollama pull qwen2.5-coder:7b
+# defina LLM_PROVIDER e LLM_MODEL no .env
 .\.venv\Scripts\python -m streamlit run desafio_1/app.py
 ```
 
@@ -24,18 +24,19 @@ ollama pull qwen2.5-coder:7b
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 cp .env.example .env
-ollama pull qwen2.5-coder:7b
+# defina LLM_PROVIDER e LLM_MODEL no .env
 .venv/bin/python -m streamlit run desafio_1/app.py
 ```
 
 ### Configuração
 
-O `.env` define o provedor e os limites. Ele é ignorado pelo Git.
+O `.env` define o provedor e os limites e é ignorado pelo Git. `LLM_PROVIDER` e `LLM_MODEL` são obrigatórios.
 
 | Variável | Uso |
 | --- | --- |
-| `LLM_PROVIDER` | `ollama` (padrão), `gemini`, `openai` ou `groq` |
-| `LLM_MODEL` | Modelo do provedor, por exemplo `qwen2.5-coder:7b` ou `gemini-3.5-flash-lite` |
+| `LLM_PROVIDER` | `ollama`, `gemini`, `openai` ou `groq` |
+| `LLM_MODEL` | Modelo do provedor escolhido |
+| `OLLAMA_BASE_URL` | Endereço do Ollama quando `LLM_PROVIDER=ollama`; veja [docs/ollama.md](docs/ollama.md) |
 | `GEMINI_API_KEY`, `OPENAI_API_KEY`, `GROQ_API_KEY` | Chave do provedor escolhido |
 | `LLM_REQUESTS_PER_SECOND` | Limite de requisições ao provedor; `0.2` na camada gratuita do Gemini |
 | `SQL_ROW_LIMIT`, `SQL_TIMEOUT_SECONDS` | Limites por consulta (padrão: 1.000 linhas e 10 s) |

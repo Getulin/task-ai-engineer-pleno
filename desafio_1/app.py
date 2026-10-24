@@ -57,7 +57,11 @@ def _render_reasoning(state: dict) -> None:
             st.code(state["sql"], language="sql")
 
 def main() -> None:
-    agent, settings = _get_agent()
+    try:
+        agent, settings = _get_agent()
+    except RuntimeError as exc:
+        st.error(str(exc))
+        st.stop()
 
     with st.sidebar:
         st.header("Configuracao")

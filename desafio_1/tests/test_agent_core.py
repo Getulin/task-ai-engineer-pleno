@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT))
 
 from agent.db import UnsafeQueryError, run_query, validate_read_only
 from agent.graph import _route_after_execute
-from agent.config import Settings
+from agent.config import Settings, get_settings
 from agent.llm import RetryingLLM
 from agent.schema import discover_schema
 
@@ -60,6 +60,16 @@ def test_router_erro_tenta_corrigir():
 def test_router_esgotou_tentativas_desiste():
     router = _route_after_execute(_settings(max_attempts=3))
     assert router({"error": "boom", "repair_count": 3}) == "give_up"
+
+def test_settings_exigem_provedor_e_modelo(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "")
+    monkeypatch.setenv("LLM_MODEL", "modelo")
+    with pytest.raises(RuntimeError, match="LLM_PROVIDER"):
+        get_settings()
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("LLM_MODEL", "")
+    with pytest.raises(RuntimeError, match="LLM_MODEL"):
+        get_settings()
 
 def test_consulta_lenta_e_interrompida_pelo_timeout():
     infinita = "WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r) SELECT MAX(n) FROM r"

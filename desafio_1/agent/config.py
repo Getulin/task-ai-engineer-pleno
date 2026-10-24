@@ -29,10 +29,21 @@ class Settings:
         return str(p)
 
 def get_settings() -> Settings:
-    """Le as configuracoes do ambiente, com defaults seguros (Ollama local)."""
+    """Le as configuracoes do ambiente; provedor e modelo sao obrigatorios."""
+    provider = os.getenv("LLM_PROVIDER", "").strip().lower()
+    model = os.getenv("LLM_MODEL", "").strip()
+    if not provider:
+        raise RuntimeError(
+            "Defina LLM_PROVIDER no .env (ollama | gemini | openai | groq). "
+            "Veja o README para a configuracao de cada provedor."
+        )
+    if not model:
+        raise RuntimeError(
+            "Defina LLM_MODEL no .env com um modelo do provedor escolhido."
+        )
     return Settings(
-        provider=os.getenv("LLM_PROVIDER", "ollama").strip().lower(),
-        model=os.getenv("LLM_MODEL", "qwen2.5-coder:7b").strip(),
+        provider=provider,
+        model=model,
         temperature=float(os.getenv("LLM_TEMPERATURE", "0")),
         ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").strip(),
         db_path=os.getenv("DB_PATH", "data/anexo_desafio_1.db").strip(),
