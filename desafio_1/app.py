@@ -27,19 +27,19 @@ def _get_agent():
     settings = get_settings()
     return build_agent(settings), settings
 
-def _render_viz(viz: dict, df: pd.DataFrame) -> None:
+def _render_viz(viz: dict, df: pd.DataFrame, key: str) -> None:
     vtype = viz.get("type", "table")
     if vtype == "bar" and viz.get("x") and viz.get("y"):
         st.plotly_chart(px.bar(df, x=viz["x"], y=viz["y"],
                                color=viz.get("series"), title=viz.get("title")),
-                        use_container_width=True)
+                        use_container_width=True, key=key)
     elif vtype == "line" and viz.get("x") and viz.get("y"):
         dfx = df.sort_values(viz["x"])
         st.plotly_chart(px.line(dfx, x=viz["x"], y=viz["y"],
                                 color=viz.get("series"), title=viz.get("title"),
-                                markers=True), use_container_width=True)
+                                markers=True), use_container_width=True, key=key)
     else:
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(df, use_container_width=True, hide_index=True, key=key)
 
 def _render_reasoning(state: dict) -> None:
     with st.expander("Etapas e consultas", expanded=False):
@@ -56,7 +56,7 @@ def _render_reasoning(state: dict) -> None:
             st.markdown("**SQL final executado:**")
             st.code(state["sql"], language="sql")
 
-def _render_answer(state: dict, row_limit: int) -> None:
+def _render_answer(state: dict, row_limit: int, key: str) -> None:
     st.markdown(state.get("answer", "_Sem resposta._"))
     for assumption in state.get("assumptions") or []:
         st.info(f"Premissa adotada: {assumption}")
@@ -76,7 +76,7 @@ def _render_answer(state: dict, row_limit: int) -> None:
     rows = state.get("result_rows") or []
     if cols and rows:
         df = pd.DataFrame(rows, columns=cols)
-        _render_viz(state.get("viz", {"type": "table"}), df)
+        _render_viz(state.get("viz", {"type": "table"}), df, key)
 
     _render_reasoning(state)
 
@@ -102,13 +102,13 @@ def main() -> None:
     st.caption("Pergunte em linguagem natural — eu investigo o banco e respondo com dados.")
 
     history = st.session_state.setdefault("history", [])
-    for exchange in history:
+    for index, exchange in enumerate(history):
         st.chat_message("user").write(exchange["question"])
         with st.chat_message("assistant"):
             if "error" in exchange:
                 st.error(exchange["error"])
             else:
-                _render_answer(exchange["state"], settings.row_limit)
+                _render_answer(exchange["state"], settings.row_limit, f"result-{index}")
 
     question = st.chat_input("Ex.: Quantas reclamacoes nao resolvidas por canal?")
     if "pending_question" in st.session_state:
@@ -130,7 +130,7 @@ def main() -> None:
                 history.append({"question": question, "error": error})
                 return
 
-        _render_answer(state, settings.row_limit)
+        _render_answer(state, settings.row_limit, f"result-{len(history)}")
     history.append({"question": question, "state": state})
 
 if __name__ == "__main__":
