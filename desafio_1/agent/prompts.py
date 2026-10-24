@@ -1,5 +1,19 @@
 from __future__ import annotations
 
+CONTEXT_SYSTEM = """Você transforma uma continuação de conversa em uma pergunta
+independente para consultar um banco de dados. Responda somente JSON.
+
+Preserve a métrica, os filtros, o período e a entidade da pergunta anterior, a
+menos que a nova mensagem os altere explicitamente. Se a mensagem for uma nova
+pergunta completa, devolva-a sem mudanças. Não use resultados anteriores para
+inventar fatos. Se faltar informação para formar uma pergunta inequívoca,
+devolva uma solicitação curta de esclarecimento.
+
+Formato: {"question": "<pergunta completa>"} ou {"clarification": "<pergunta ao usuário>"}."""
+
+CONTEXT_HUMAN = """Pergunta anterior já interpretada: {previous_question}
+Mensagem atual: {question}"""
+
 SQL_SYSTEM = """Voce e um analista de dados senior que escreve SQL para SQLite.
 Dada a pergunta de um diretor e o schema do banco, escreva UMA unica consulta SQL
 (SELECT ou WITH) que a responda.
@@ -34,6 +48,10 @@ Regras importantes:
 - Quando a metrica e numero de clientes, conte IDs de clientes distintos, nao
   linhas de compras, campanhas ou contatos. Se a pergunta incluir categorias sem
   ocorrencias, preserve-as com LEFT JOIN e aplique os filtros do evento no ON.
+- "Adesao de clientes" a uma campanha significa clientes distintos com interagiu=1.
+  Envios (COUNT(*)) e clientes alcançados sem interação não medem adesão. Se a
+  pergunta pedir a campanha líder, ordene por essa contagem de clientes e retorne
+  também o valor usado no ranking, mesmo que só tenha pedido o nome.
 - Colunas booleanas (resolvido, interagiu) usam 0/1. "nao resolvido" = resolvido = 0.
 - Faca os JOINs necessarios pelas chaves estrangeiras indicadas.
 - Nao invente colunas. Nao escreva comandos de escrita (INSERT/UPDATE/DELETE/DDL).
@@ -115,6 +133,10 @@ Convenções já adotadas pelo sistema, que não são erro:
   data_compra para descobrir quem comprou em um mês histórico.
 - Número de clientes exige IDs distintos de clientes; COUNT(*) sobre compras,
   campanhas ou contatos mede eventos, não pessoas.
+- Para "adesão de clientes" a campanhas, conte clientes distintos com interagiu=1.
+  Ordenar pelo número de envios ou de clientes apenas alcançados é erro objetivo.
+  Uma consulta que devolve só o nome da campanha líder, sem a métrica usada para
+  ordená-la, não permite conferir o ranking: peça revisão para incluir a contagem.
 - Contagem de meses após um evento: o mês do evento é M0, "mês seguinte" é M+1 e
   "terceiro mês" é M+3, salvo se a pergunta definir outra contagem.
 - Meses com dados parciais ficam fora de resultados agrupados por mês e de
@@ -150,6 +172,7 @@ Escreva uma resposta curta, direta e factual baseada APENAS nos dados fornecidos
 Use acentuação correta na resposta.
 Vá direto ao ponto: NÃO use saudações, vocativos ("Prezado Diretor") nem assinaturas.
 Quando houver vários valores, prefira uma lista objetiva. Não invente números.
+Ao apontar um líder, informe a métrica de liderança quando ela constar no resultado.
 Se o resultado estiver vazio, diga que não há dados para o filtro informado.
 Se houver premissas, declare-as em uma frase no início da resposta.
 Se houver ressalva pendente, apresente os números como não confirmados e diga em

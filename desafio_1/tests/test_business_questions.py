@@ -118,6 +118,28 @@ def test_campaign_adhesion_counts_distinct_interacting_customers():
     rows = _rows(CAMPAIGN_ADHESION)
     assert rows[0] == ("Black Friday", 32)
     assert rows[1] == ("Volta às Aulas", 30)
+    sent = _rows("""SELECT nome_campanha, COUNT(*) FROM campanhas_marketing
+        GROUP BY nome_campanha ORDER BY COUNT(*) DESC""")
+    assert sent[0] == ("Volta às Aulas", 60)
+
+
+def test_campaign_leader_revises_send_count_and_exposes_adhesion_metric():
+    wrong_sql = """SELECT nome_campanha FROM campanhas_marketing
+        GROUP BY nome_campanha ORDER BY COUNT(*) DESC LIMIT 1"""
+    corrected_sql = CAMPAIGN_ADHESION + "LIMIT 1"
+    llm = RecordingLLM([
+        wrong_sql,
+        '{"verdict": "revise", "feedback": "Envios não são adesão; conte clientes distintos que interagiram e retorne a contagem."}',
+        corrected_sql,
+        '{"verdict": "ok", "feedback": ""}',
+        '{"type": "table", "x": null, "y": null, "title": "Campanha"}',
+        "Black Friday, com 32 clientes distintos que interagiram.",
+    ])
+    result = _ask(llm, "Qual a campanha com maior adesão dos clientes?")
+    assert result["result_rows"] == [("Black Friday", 32)]
+    assert result["answer_status"] == "confirmed"
+    assert "clientes distintos com interagiu=1" in llm.calls[0][0].content
+    assert "Uma consulta que devolve só o nome" in llm.calls[1][0].content
 
 
 def test_purchase_categories_rank_by_purchases_per_customer():

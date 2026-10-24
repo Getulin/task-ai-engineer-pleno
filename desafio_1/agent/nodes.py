@@ -9,6 +9,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from . import prompts
 from .config import Settings
+from .context import is_followup, requires_context
 from .db import UnsafeQueryError, run_query, validate_read_only
 from .llm import ChatModel
 from .schema import discover_schema, find_partial_months, is_personal_column
@@ -108,6 +109,45 @@ def _partial_month_notes(columns: list[str], rows: list[tuple],
 def make_nodes(llm: ChatModel, settings: Settings) -> dict:
     """Cria os nos com o LLM e as settings injetados (closures)."""
 
+    def contextualize(state: AgentState) -> AgentState:
+        question = state["question"].strip()
+        previous = (state.get("previous_question") or "").strip()
+        patch: dict = {"original_question": question, "question": question}
+        if not is_followup(question) and not state.get("previous_clarification"):
+            return patch
+        if not previous:
+            if requires_context(question):
+                patch["clarification"] = (
+                    "Essa pergunta depende de uma anterior. Qual assunto, período e métrica "
+                    "você quer analisar?"
+                )
+            return patch
+        try:
+            response = _parse_json(_text(llm.invoke([
+                SystemMessage(prompts.CONTEXT_SYSTEM),
+                HumanMessage(prompts.CONTEXT_HUMAN.format(
+                    previous_question=previous, question=question,
+                )),
+            ])))
+            resolved = str(response.get("question") or "").strip()
+            clarification = str(response.get("clarification") or "").strip()
+            if clarification:
+                patch["clarification"] = clarification[:500]
+            elif resolved and len(resolved) <= 1000:
+                patch["question"] = resolved
+                patch["trace"] = _append_trace(
+                    state, "contextualizar_pergunta",
+                    "Interpretei a continuação usando a pergunta anterior.", resolved,
+                )
+            else:
+                raise ValueError("Resposta de contexto incompleta")
+        except Exception:
+            patch["clarification"] = (
+                "Não consegui relacionar esta mensagem à pergunta anterior. "
+                "Pode escrever a pergunta completa?"
+            )
+        return patch
+
     def discover(state: AgentState) -> AgentState:
         schema = discover_schema(settings.db_abspath)
         temporal = interpret_question(state["question"])
@@ -132,7 +172,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
         return {
             "answer": state["clarification"],
             "trace": _append_trace(state, "esclarecer_pergunta",
-                                   "A pergunta precisa indicar qual evento define o período."),
+                                   "Pedi os detalhes necessários para responder."),
         }
 
     def generate_sql(state: AgentState) -> AgentState:
@@ -367,6 +407,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
         }
 
     return {
+        "contextualize": contextualize,
         "discover": discover,
         "clarify": clarify,
         "generate_sql": generate_sql,

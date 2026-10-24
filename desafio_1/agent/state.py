@@ -19,6 +19,9 @@ class TraceStep(TypedDict):
 
 class AgentState(TypedDict, total=False):
     question: str
+    original_question: str
+    previous_question: Optional[str]
+    previous_clarification: bool
 
     schema: str
     partial_months: list[str]

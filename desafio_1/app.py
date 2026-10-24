@@ -21,6 +21,7 @@ EXAMPLES = [
 ]
 
 TRACE_LABELS = {
+    "contextualizar_pergunta": "Interpretação da continuação",
     "descoberta_schema": "Descoberta do esquema",
     "esclarecer_pergunta": "Esclarecimento da pergunta",
     "gerar_sql": "Geração do SQL",
@@ -70,6 +71,8 @@ def _render_reasoning(state: dict) -> None:
             st.code(state["sql"], language="sql")
 
 def _render_answer(state: dict, row_limit: int, key: str) -> None:
+    if state.get("question") != state.get("original_question", state.get("question")):
+        st.info(f"Interpretei sua pergunta como: {state['question']}")
     st.markdown(state.get("answer", "_Sem resposta._"))
     for assumption in state.get("assumptions") or []:
         st.info(f"Premissa adotada: {assumption}")
@@ -136,7 +139,18 @@ def main() -> None:
     with st.chat_message("assistant"):
         with st.spinner("Investigando o banco de dados..."):
             try:
-                state = agent.invoke({"question": question, "trace": []})
+                previous = next((exchange for exchange in reversed(history)
+                                 if "state" in exchange), None)
+                agent_input = {"question": question, "trace": []}
+                if previous:
+                    previous_state = previous["state"]
+                    agent_input["previous_question"] = previous_state.get(
+                        "question", previous["question"]
+                    )
+                    agent_input["previous_clarification"] = bool(
+                        previous_state.get("clarification")
+                    )
+                state = agent.invoke(agent_input)
             except Exception as exc:
                 error = f"Não foi possível concluir a análise: {str(exc)[:300]}"
                 st.error(error)

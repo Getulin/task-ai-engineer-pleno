@@ -56,6 +56,8 @@ No Linux ou macOS, use `.venv/bin/python -m pytest desafio_1/tests -q`.
 
 ```text
 pergunta
+  → continuação: reescrita com a última pergunta interpretada
+     └─ continuação dependente sem referência ou leitura incerta: pede esclarecimento
   → descoberta de tabelas, colunas, relações e valores do SQLite
   → interpretação do período citado
      └─ "clientes em um mês" sem evento definido: pede esclarecimento
@@ -74,11 +76,12 @@ O agente é um grafo de estados em LangGraph (`desafio_1/agent/graph.py`). O gra
 | Módulo | Responsabilidade |
 | --- | --- |
 | `schema.py` | Lê o esquema em tempo de execução: tabelas, colunas, relações, valores de colunas de baixa cardinalidade, intervalos de datas e meses cobertos só em parte. Exemplos de colunas pessoais reconhecidas são omitidos do contexto do modelo. |
+| `context.py` | Identifica mensagens que dependem da pergunta anterior. |
 | `temporal.py` | Interpreta os meses citados na pergunta e identifica quando falta definir o evento que associa clientes a um mês. |
 | `db.py` | Executa uma instrução `SELECT` ou `WITH` por vez, em conexão somente leitura, com limite de linhas e de tempo. |
 | `nodes.py` | Gera, executa, corrige e verifica o SQL; escolhe a visualização e redige a resposta. |
 | `llm.py` | Cria o modelo do provedor configurado e repete chamadas recusadas por limite de taxa. |
-| `app.py` | Interface Streamlit com resposta, gráfico, avisos, histórico visual da sessão e a seção “Etapas e consultas”. |
+| `app.py` | Interface Streamlit com resposta, gráfico, avisos, histórico da sessão e a seção “Etapas e consultas”. Envia a última pergunta interpretada para resolver continuações. |
 
 A verificação classifica cada resultado em três casos: a consulta responde à pergunta; a pergunta admite mais de uma leitura e a consulta aplica uma delas, que passa a ser exibida como premissa; ou há um erro objetivo (métrica, filtro, agrupamento ou período), que gera uma consulta adicional. A nova verificação recebe as correções já pedidas. Se o erro persistir, o resultado aparece com a ressalva em vez de ser descartado.
 
@@ -86,7 +89,7 @@ As consultas de negócio do agente são geradas em tempo de execução. O códig
 
 As datas do banco vão, em conjunto, de 22/07/2024 a 22/07/2025; o intervalo varia entre as tabelas. O agente recebe a orientação de excluir meses incompletos de séries mensais e coortes (julho de 2024 e julho de 2025) e de incluir todos os registros em totais e médias. Um mês citado pelo nome sem ano abrange todas as ocorrências desse mês nos anos disponíveis; “mais recente” ou um ano explícito alteram esse recorte. Em contagens após um evento, o mês do evento é M0, “mês seguinte” é M+1 e “terceiro mês” é M+3. O verificador confere o SQL gerado, mas a correção da resposta ainda depende do modelo.
 
-O agente escolhe entre tabela, barras e linhas conforme a pergunta e as colunas retornadas. A interface avisa quando a consulta excede o limite de linhas. O histórico mantém perguntas e resultados visíveis durante a sessão, mas uma nova pergunta não recebe as anteriores como contexto.
+O agente escolhe entre tabela, barras e linhas conforme a pergunta e as colunas retornadas. A interface avisa quando a consulta excede o limite de linhas. O histórico mantém perguntas e resultados visíveis durante a sessão. Uma continuação como “e por estado?” usa a última pergunta interpretada para formar uma consulta completa; a interpretação aparece na interface. Perguntas independentes não usam esse contexto, e resultados anteriores não são reenviados ao modelo nessa etapa.
 
 ## Consultas testadas
 
@@ -104,12 +107,20 @@ Os valores abaixo são referências conferidas com consultas SQL ao banco. `desa
 | Qual a campanha com a maior adesão de clientes? | Black Friday, com 32 clientes distintos que interagiram. |
 | Qual a campanha com a maior adesão de clientes, e quantos clientes foram? | Black Friday, 32 clientes distintos que interagiram. |
 
-Na pergunta sobre pagamentos, `compras` é usada como aproximação, pois o banco não registra pagamentos separadamente. Nas duas últimas, adesão significa quantidade de clientes distintos com `interagiu = 1`. Se medida como proporção dos clientes alcançados, Black Friday também lidera: 32 de 45 (71,11%).
+Na pergunta sobre pagamentos, `compras` é usada como aproximação, pois o banco não registra pagamentos separadamente. Nas duas últimas, adesão significa quantidade de clientes distintos com `interagiu = 1`. Black Friday tem 32 clientes nessa condição, contra 30 de Volta às Aulas. Se medida como proporção dos clientes alcançados, Black Friday também lidera: 32 de 45 (71,11%). Contar envios levaria a outro ranking e não mede adesão.
+
+## Melhorias realizadas
+
+- Consultas SQL com tentativa de correção após erro, reconsideração de resultados vazios e verificação da métrica, dos filtros e do período antes da resposta.
+- Interpretação de meses sem ano em todos os anos disponíveis, com tratamento dos meses incompletos em séries e coortes.
+- Contagem de clientes distintos em métricas de pessoas. Na comparação de campanhas, a consulta deve mostrar a contagem que determina a liderança.
+- Histórico de perguntas e respostas na sessão, com interpretação de continuações a partir da última pergunta e exibição da pergunta completa usada na consulta.
+- Limites de tempo e linhas para consultas; exemplos de colunas pessoais reconhecidas são omitidos do contexto enviado ao modelo.
 
 ## Melhorias e extensões
 
 - Usar um modelo mais capaz apenas na verificação e medir o acerto com um conjunto maior de perguntas de referência. Com modelos pequenos, perguntas de várias etapas podem variar entre execuções.
-- Memória contextual de conversa, para perguntas de acompanhamento como “e por estado?”. O histórico atual é apenas visual.
+- Contexto de mais de uma pergunta e referências aos resultados anteriores; a implementação atual usa apenas a última pergunta interpretada.
 - Cache do esquema e seleção das tabelas relevantes, para bancos maiores.
 - Aplicar de forma determinística o tipo de visualização quando o usuário pedir tabela ou gráfico específico.
 - Exportação do resultado completo, além do limite de linhas carregadas na interface. Os controles atuais permitem baixar os dados carregados na tabela e a imagem do gráfico.
