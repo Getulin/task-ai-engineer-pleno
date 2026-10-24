@@ -9,6 +9,14 @@ _MAX_DISTINCT_FOR_ENUM = 25
 _SAMPLE_EXAMPLES = 3
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}")
 _NUMERIC_TYPES = ("INT", "REAL", "NUM", "FLOAT", "DOUBLE", "DEC")
+_PERSONAL_COLUMNS = {"nome", "email", "telefone", "celular", "cpf", "rg", "documento", "endereco", "cep"}
+
+def is_personal_column(name: str) -> bool:
+    normalized = name.lower()
+    parts = set(normalized.split("_"))
+    return normalized in _PERSONAL_COLUMNS or bool(
+        parts & {"email", "telefone", "celular", "cpf", "rg", "documento", "endereco", "cep"}
+    ) or ("nome" in parts and bool(parts & {"cliente", "pessoa", "usuario", "contato"}))
 
 def _is_numeric(col_type: str) -> bool:
     return any(t in (col_type or "").upper() for t in _NUMERIC_TYPES)
@@ -101,6 +109,10 @@ def _describe_table(cur: sqlite3.Cursor, table: str) -> str:
 def _column_hint(cur: sqlite3.Cursor, table: str, col: str, col_type: str) -> str:
     """Enriquece a coluna com valores reais do banco (enum, exemplos, min/max)."""
     quoted = f'"{col}"'
+
+    if is_personal_column(col):
+        distinct = cur.execute(f"SELECT COUNT(DISTINCT {quoted}) FROM '{table}'").fetchone()[0]
+        return f"  -> {distinct} valores distintos" if distinct else ""
 
     if _is_numeric(col_type):
         row = cur.execute(

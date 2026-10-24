@@ -11,7 +11,7 @@ from . import prompts
 from .config import Settings
 from .db import UnsafeQueryError, run_query, validate_read_only
 from .llm import ChatModel
-from .schema import discover_schema, find_partial_months
+from .schema import discover_schema, find_partial_months, is_personal_column
 from .state import AgentState
 
 _MAX_REVIEW_RETRIES = 1
@@ -43,6 +43,11 @@ def _append_trace(state: AgentState, step: str, detail: str, data: Any = None) -
     trace = list(state.get("trace", []))
     trace.append({"step": step, "detail": detail, "data": data})
     return trace
+
+def _rows_for_model(columns: list[str], rows: list[tuple]) -> list[list[Any]]:
+    personal = [is_personal_column(column) for column in columns]
+    return [["[omitido]" if personal[i] else value for i, value in enumerate(row)]
+            for row in rows]
 
 def _format_history(history: list[dict]) -> str:
     if not history:
@@ -198,7 +203,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
         rows = state.get("result_rows", [])
         result = {
             "columns": columns,
-            "rows": [list(row) for row in rows[:10]],
+            "rows": _rows_for_model(columns, rows[:10]),
             "loaded_rows": len(rows),
             "truncated": state.get("result_truncated", False),
         }
@@ -280,7 +285,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
     def decide_viz(state: AgentState) -> AgentState:
         columns = state.get("result_columns", [])
         rows = state.get("result_rows", [])
-        sample = [dict(zip(columns, r)) for r in rows[:5]]
+        sample = [dict(zip(columns, r)) for r in _rows_for_model(columns, rows[:5])]
         spec = _heuristic_viz(state["question"], columns, rows)
         try:
             messages = [
@@ -316,7 +321,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
         partial = len(rows) > _ANSWER_ROWS or state.get("result_truncated", False)
         preview = {
             "columns": columns,
-            "rows": [list(r) for r in rows[:_ANSWER_ROWS]],
+            "rows": _rows_for_model(columns, rows[:_ANSWER_ROWS]),
             "loaded_rows": len(rows),
         }
         messages = [

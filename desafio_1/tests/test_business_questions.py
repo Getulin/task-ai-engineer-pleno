@@ -78,6 +78,22 @@ GROUP BY mes, canal
 ORDER BY mes, canal
 """
 
+SEPTEMBER_APP_CUSTOMERS = """
+SELECT strftime('%Y-%m', data_compra) AS mes, COUNT(DISTINCT cliente_id) AS clientes
+FROM compras
+WHERE canal = 'App' AND strftime('%m', data_compra) = '09'
+GROUP BY mes
+ORDER BY mes
+"""
+
+CAMPAIGN_ADHESION = """
+SELECT nome_campanha, COUNT(DISTINCT cliente_id) AS clientes
+FROM campanhas_marketing
+WHERE interagiu = 1
+GROUP BY nome_campanha
+ORDER BY clientes DESC, nome_campanha
+"""
+
 
 def test_top_five_states_count_people_in_app_purchases_in_may():
     expected = [
@@ -94,6 +110,14 @@ def test_top_five_states_count_people_in_app_purchases_in_may():
 def test_whatsapp_campaigns_count_interacting_people_in_2024():
     assert _rows(WHATSAPP_2024) == [(17,)]
     assert run_query(str(DB), WHATSAPP_2024).rows == [(17,)]
+
+def test_september_app_question_covers_all_available_years():
+    assert _rows(SEPTEMBER_APP_CUSTOMERS) == [("2024-09", 22)]
+
+def test_campaign_adhesion_counts_distinct_interacting_customers():
+    rows = _rows(CAMPAIGN_ADHESION)
+    assert rows[0] == ("Black Friday", 32)
+    assert rows[1] == ("Volta às Aulas", 30)
 
 
 def test_purchase_categories_rank_by_purchases_per_customer():
@@ -251,6 +275,23 @@ TABLE_VIZ = '{"type": "table", "x": null, "y": null, "series": null, "title": "R
 
 def _ask(llm, question):
     return build_agent(_settings(), llm=llm).invoke({"question": question, "trace": []})
+
+
+def test_valores_pessoais_ficam_na_tabela_mas_nao_vao_ao_modelo():
+    with sqlite3.connect(DB) as conn:
+        nome, email = conn.execute("SELECT nome, email FROM clientes ORDER BY id LIMIT 1").fetchone()
+    llm = RecordingLLM([
+        "SELECT nome, email FROM clientes ORDER BY id LIMIT 1",
+        '{"verdict": "ok", "feedback": ""}',
+        TABLE_VIZ,
+        "Resultado na tabela.",
+    ])
+    result = _ask(llm, "Mostre o primeiro cliente.")
+    assert result["result_rows"] == [(nome, email)]
+    for messages in llm.calls:
+        prompt = "\n".join(message.content for message in messages)
+        assert nome not in prompt
+        assert email not in prompt
 
 
 def test_ambiguous_question_is_answered_with_declared_assumption():

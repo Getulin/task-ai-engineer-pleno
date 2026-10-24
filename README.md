@@ -66,13 +66,15 @@ O agente é um grafo de estados em LangGraph (`desafio_1/agent/graph.py`). O gra
 
 | Módulo | Responsabilidade |
 | --- | --- |
-| `schema.py` | Lê o esquema em tempo de execução: tabelas, colunas, relações, valores de colunas de baixa cardinalidade, intervalos de datas e meses cobertos só em parte. Nenhuma consulta é fixa no código. |
+| `schema.py` | Lê o esquema em tempo de execução: tabelas, colunas, relações, valores de colunas de baixa cardinalidade, intervalos de datas e meses cobertos só em parte. Exemplos de nomes e contatos pessoais são omitidos do contexto do modelo. Nenhuma consulta é fixa no código. |
 | `db.py` | Executa uma instrução `SELECT` ou `WITH` por vez, em conexão somente leitura, com limite de linhas e de tempo. |
 | `nodes.py` | Gera, executa, corrige e verifica o SQL; escolhe a visualização e redige a resposta. |
 | `llm.py` | Cria o modelo do provedor configurado e repete chamadas recusadas por limite de taxa. |
 | `app.py` | Interface Streamlit com resposta, gráfico, avisos e a seção “Etapas e consultas”. |
 
 A verificação classifica cada resultado em três casos: a consulta responde à pergunta; a pergunta admite mais de uma leitura e a consulta aplica uma delas, que passa a ser exibida como premissa; ou há um erro objetivo (métrica, filtro, agrupamento ou período), que gera uma consulta adicional. A nova verificação recebe as correções já pedidas. Se o erro persistir, o resultado aparece com a ressalva em vez de ser descartado.
+
+Valores de colunas pessoais são ocultados nas amostras de resultados enviadas ao modelo. A tabela exibida localmente mantém os valores originais.
 
 Os dados vão de 22/07/2024 a 22/07/2025. Séries mensais e coortes excluem os meses incompletos (julho de 2024 e julho de 2025); totais e médias usam todos os registros. Em contagens de meses após um evento, o mês do evento é M0, “mês seguinte” é M+1 e “terceiro mês” é M+3. A resposta informa como termos desse tipo foram interpretados.
 

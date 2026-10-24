@@ -39,6 +39,14 @@ def test_schema_tem_tabelas_e_valores():
     assert "clientes" in schema and "compras" in schema
     assert "App" in schema and "Reclama" in schema
 
+def test_schema_nao_envia_exemplos_de_nome_e_email():
+    with sqlite3.connect(DB) as conn:
+        nome, email = conn.execute("SELECT nome, email FROM clientes ORDER BY id LIMIT 1").fetchone()
+    schema = discover_schema(DB)
+    assert "nome (TEXT)" in schema and "email (TEXT)" in schema
+    assert nome not in schema
+    assert email not in schema
+
 def test_run_query_read_only():
     res = run_query(DB, "SELECT estado, COUNT(*) FROM clientes GROUP BY estado")
     assert res.columns[0] == "estado"
