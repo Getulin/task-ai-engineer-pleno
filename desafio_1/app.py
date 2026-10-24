@@ -112,7 +112,7 @@ def main() -> None:
                 st.session_state["pending_question"] = ex
 
     st.title("Assistente Virtual de Dados")
-    st.caption("Pergunte em linguagem natural — eu investigo o banco e respondo com dados.")
+    st.caption("Pergunte sobre dados, e eu investigo o banco e respondo com fatos.")
 
     history = st.session_state.setdefault("history", [])
     for index, exchange in enumerate(history):
