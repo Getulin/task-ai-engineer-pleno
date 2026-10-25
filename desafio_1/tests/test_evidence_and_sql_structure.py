@@ -105,6 +105,12 @@ def test_final_text_accepts_rounded_measure_and_explicit_filter():
         [("2024-08",), ("2024-09",)],
     ) == []
     assert unsupported_numbers(
+        "Os 5 estados com mais clientes são estes.", "Liste os 5 estados.",
+        "SELECT estado,COUNT(*) FROM clientes GROUP BY estado LIMIT 5",
+        [("São Paulo", 6), ("Minas Gerais", 3), ("Santa Catarina", 3),
+         ("Alagoas", 2), ("Espírito Santo", 2)],
+    ) == []
+    assert unsupported_numbers(
         "Janela de 12 meses.", "Qual a tendência no último ano?",
         "SELECT date(MAX(data_contato), '-12 months') FROM suporte", [],
     ) == []

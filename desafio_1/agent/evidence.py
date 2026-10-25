@@ -146,6 +146,9 @@ def unsupported_numbers(
                 and not re.search(r"\bcompletos?\b", following)
             )
             or (int(token) == len(rows) and re.match(r"\s+(?:linhas?|registros?)\b", following))
+            or (int(token) == len(rows) and re.match(
+                r"\s+(?:estados?|categorias?|canais|campanhas?)\b", following
+            ))
         ):
             continue
         before = remaining[max(0, match.start() - 80):match.start()]

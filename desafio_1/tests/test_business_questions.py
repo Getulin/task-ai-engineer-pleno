@@ -419,7 +419,7 @@ def test_unresolved_review_keeps_last_result_and_reports_caveat():
 def test_second_verification_receives_previous_feedback():
     feedback = "O terceiro mês deve ser contado como M+2."
     llm = RecordingLLM([
-        "SELECT COUNT(*) AS clientes FROM clientes",
+        "SELECT COUNT(DISTINCT cliente_id) AS clientes FROM compras",
         json.dumps({"verdict": "revise", "feedback": feedback}),
         "SELECT COUNT(DISTINCT cliente_id) AS clientes FROM compras",
         '{"verdict": "ok", "feedback": ""}',
@@ -459,16 +459,14 @@ def test_verifier_failure_marks_answer_as_unverified():
     assert result["result_rows"] == [(17,)]
 
 
-def test_result_with_partial_months_carries_a_data_note():
+def test_trend_with_partial_months_is_not_confirmed():
     llm = ScriptedLLM([
         COMPLAINT_TREND_WITH_PARTIAL_MONTHS,
-        '{"verdict": "ok", "feedback": ""}',
-        TABLE_VIZ,
-        "Tendência mensal.",
+        COMPLAINT_TREND_WITH_PARTIAL_MONTHS,
     ])
     result = _ask(llm, "Qual a tendência de reclamações por canal no último ano?")
-    assert len(result["data_notes"]) == 1
-    assert "2024-07, 2025-07" in result["data_notes"][0]
+    assert result["answer_status"] == "unconfirmed"
+    assert any("meses parciais" in issue for issue in result["evidence_issues"])
 
 
 def test_series_of_complete_months_reports_the_partial_months_left_out():

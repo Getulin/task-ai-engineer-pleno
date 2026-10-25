@@ -26,6 +26,7 @@ class AgentState(TypedDict, total=False):
     schema: str
     partial_months: list[str]
     temporal_guidance: str
+    query_plan: dict
     clarification: Optional[str]
 
     sql: str

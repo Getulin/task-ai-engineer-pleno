@@ -23,12 +23,14 @@ EXAMPLES = [
 TRACE_LABELS = {
     "contextualizar_pergunta": "Interpretação da continuação",
     "descoberta_schema": "Descoberta do esquema",
+    "planejar_consulta": "Plano da consulta",
     "esclarecer_pergunta": "Esclarecimento da pergunta",
     "gerar_sql": "Geração do SQL",
     "executar_sql": "Execução do SQL",
     "erro_execucao": "Erro de execução",
     "reflexao_vazio": "Revisão do resultado vazio",
     "verificar_resultado": "Verificação do resultado",
+    "validar_evidencia_final": "Conferência da resposta",
     "decidir_visualizacao": "Escolha da visualização",
     "resposta": "Resposta",
 }

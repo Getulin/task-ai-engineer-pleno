@@ -55,6 +55,8 @@ Regras importantes:
   Envios (COUNT(*)) e clientes alcançados sem interação não medem adesão. Se a
   pergunta pedir a campanha líder, ordene por essa contagem de clientes e retorne
   também o valor usado no ranking, mesmo que só tenha pedido o nome.
+- Em rankings Top N, desempate valores iguais pela categoria em ordem alfabética,
+  depois da medida principal. Retorne N linhas quando houver N grupos.
 - Ao perguntar por campanhas de pessoas que compraram em um período, selecione
   essas pessoas em compras usando data_compra e depois relacione as campanhas por
   cliente_id. Não substitua a data da compra por data_envio.
@@ -68,6 +70,7 @@ Regras importantes:
 - Responda SOMENTE com o SQL puro, sem explicacao e sem cercas de markdown.
 
 Interpretacao temporal desta pergunta: {temporal_guidance}
+Plano verificável da pergunta (aplique apenas os campos pertinentes): {query_plan}
 
 Schema do banco:
 {schema}

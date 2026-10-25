@@ -16,6 +16,7 @@ from .evidence import (
     evidence_issues, mismatched_category_values, missing_rank_label, unsupported_numbers,
 )
 from .llm import ChatModel
+from .query_plan import QueryPlan, make_plan, plan_issues
 from .schema import discover_schema, find_partial_months, is_personal_column
 from .state import AgentState
 from .temporal import interpret_question
@@ -182,10 +183,20 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
     def discover(state: AgentState) -> AgentState:
         schema = discover_schema(settings.db_abspath)
         temporal = interpret_question(state["question"])
+        plan = make_plan(state["question"])
+        trace = _append_trace(
+            state, "descoberta_schema",
+            "Inspecionei o banco dinamicamente (tabelas, colunas e valores reais).",
+        )
+        trace = _append_trace(
+            {"trace": trace}, "planejar_consulta",
+            "Identifiquei eventos, filtros e contagens exigidos pela pergunta.", plan.as_dict(),
+        )
         return {
             "schema": schema,
             "partial_months": find_partial_months(settings.db_abspath),
             "temporal_guidance": temporal.guidance,
+            "query_plan": plan.as_dict(),
             "clarification": temporal.clarification,
             "repair_count": 0,
             "review_count": 0,
@@ -194,10 +205,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
             "caveat": None,
             "answer_status": None,
             "evidence_issues": [],
-            "trace": _append_trace(
-                state, "descoberta_schema",
-                "Inspecionei o banco dinamicamente (tabelas, colunas e valores reais).",
-            ),
+            "trace": trace,
         }
 
     def clarify(state: AgentState) -> AgentState:
@@ -210,6 +218,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
     def generate_sql(state: AgentState) -> AgentState:
         system = SystemMessage(prompts.SQL_SYSTEM.format(
             schema=state["schema"], temporal_guidance=state["temporal_guidance"],
+            query_plan=json.dumps(state["query_plan"], ensure_ascii=False),
         ))
         patch: dict = {}
 
@@ -300,6 +309,10 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
         structural_issues.extend(evidence_issues(
             state["question"], state.get("sql", ""), columns, rows,
             state.get("result_truncated", False),
+        ))
+        structural_issues.extend(plan_issues(
+            QueryPlan(**state["query_plan"]), state.get("sql", ""), rows,
+            state.get("partial_months") or [],
         ))
         if _missing_purchase_cohort(state["question"], state.get("sql", "")):
             structural_issues.append(

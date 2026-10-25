@@ -94,6 +94,7 @@ pergunta
   → descoberta de tabelas, colunas, relações e valores do SQLite
   → interpretação do período citado
      └─ "clientes em um mês" sem evento definido: pede esclarecimento
+  → plano verificável: tabelas, data do evento, filtros e contagem de pessoas
   → geração, validação estrutural e execução de SQL
      ├─ erro de SQL: nova tentativa com a mensagem de erro
      └─ resultado vazio: uma reconsideração dos filtros
@@ -113,6 +114,7 @@ O agente é um grafo de estados em LangGraph (`desafio_1/agent/graph.py`). O gra
 | `schema.py` | Lê o esquema em tempo de execução: tabelas, colunas, relações, valores de colunas de baixa cardinalidade, intervalos de datas e meses cobertos só em parte. Exemplos de colunas pessoais reconhecidas são omitidos do contexto do modelo. |
 | `context.py` | Identifica mensagens que dependem da pergunta anterior. |
 | `temporal.py` | Interpreta os meses citados na pergunta e identifica quando falta definir o evento que associa clientes a um mês. |
+| `query_plan.py` | Extrai exigências explícitas da pergunta e confere sua presença na consulta gerada: evento, data, filtros, clientes distintos, desempate e meses parciais. |
 | `db.py` | Valida a árvore sintática do SQL com SQLGlot e executa uma consulta `SELECT` por vez, com conexão somente leitura, autorização do SQLite e limites de linhas e tempo. |
 | `evidence.py` | Confere requisitos objetivos da pergunta contra o SQL e o resultado; verifica números e líderes citados na resposta. |
 | `nodes.py` | Gera, executa, corrige e verifica o SQL; escolhe a visualização e redige a resposta. |
