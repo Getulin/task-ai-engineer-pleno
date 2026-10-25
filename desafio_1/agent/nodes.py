@@ -15,6 +15,7 @@ from .db import UnsafeQueryError, run_query, validate_read_only
 from .evidence import (
     evidence_issues, mismatched_category_values, missing_rank_label, unsupported_numbers,
 )
+from .investigation import inspect_relevant_values
 from .llm import ChatModel
 from .query_plan import QueryPlan, make_plan, plan_issues
 from .schema import discover_schema, find_partial_months, is_personal_column
@@ -201,6 +202,8 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
             "repair_count": 0,
             "review_count": 0,
             "review_history": [],
+            "investigation": {},
+            "investigation_count": 0,
             "assumptions": [temporal.assumption] if temporal.assumption else [],
             "caveat": None,
             "answer_status": None,
@@ -239,6 +242,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
         elif state.get("reconsider_empty"):
             human = HumanMessage(prompts.SQL_RECONSIDER_EMPTY.format(
                 question=state["question"], sql=state.get("sql", ""),
+                investigation=json.dumps(state.get("investigation") or {}, ensure_ascii=False),
             ))
             detail = f"Resultado vazio: reconsiderando suposições (tentativa #{state.get('empty_retries', 0)})."
             patch["reconsider_empty"] = False
@@ -271,7 +275,10 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
                 "result_rows": result.rows,
                 "result_truncated": result.truncated,
                 "error": None,
-                "last_was_empty": result.row_count == 0,
+                "last_was_empty": result.row_count == 0 or (
+                    result.row_count == 1 and len(result.columns) == 1
+                    and result.rows[0][0] == 0
+                ),
                 "trace": _append_trace(
                     state, "executar_sql",
                     f"Consulta executada: {result.row_count} linha(s) carregada(s).",
@@ -520,6 +527,24 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
             ),
         }
 
+    def investigate(state: AgentState) -> AgentState:
+        if state.get("investigation_count", 0) >= 1:
+            return {}
+        try:
+            data = inspect_relevant_values(
+                settings.db_abspath, QueryPlan(**state["query_plan"])
+            )
+        except (sqlite3.Error, OSError):
+            data = {}
+        return {
+            "investigation": data,
+            "investigation_count": 1,
+            "trace": _append_trace(
+                state, "investigar_dados",
+                "Conferi valores de categorias e intervalo de datas dos eventos relevantes.", data,
+            ),
+        }
+
     return {
         "contextualize": contextualize,
         "discover": discover,
@@ -527,6 +552,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
         "generate_sql": generate_sql,
         "execute_sql": execute_sql,
         "reconsider": reconsider,
+        "investigate": investigate,
         "assess_result": assess_result,
         "decide_viz": decide_viz,
         "synthesize": synthesize,

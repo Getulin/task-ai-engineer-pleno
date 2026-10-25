@@ -39,6 +39,7 @@ def build_agent(settings: Settings | None = None, llm=None):
     g.add_node("clarify", nodes["clarify"])
     g.add_node("generate_sql", nodes["generate_sql"])
     g.add_node("execute_sql", nodes["execute_sql"])
+    g.add_node("investigate", nodes["investigate"])
     g.add_node("reconsider", nodes["reconsider"])
     g.add_node("assess_result", nodes["assess_result"])
     g.add_node("decide_viz", nodes["decide_viz"])
@@ -62,11 +63,12 @@ def build_agent(settings: Settings | None = None, llm=None):
         _route_after_execute(settings),
         {
             "repair": "generate_sql",
-            "reconsider": "reconsider",
+            "reconsider": "investigate",
             "give_up": "synthesize",
             "ok": "assess_result",
         },
     )
+    g.add_edge("investigate", "reconsider")
     g.add_edge("reconsider", "generate_sql")
     g.add_conditional_edges(
         "assess_result",

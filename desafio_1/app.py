@@ -27,6 +27,7 @@ TRACE_LABELS = {
     "esclarecer_pergunta": "Esclarecimento da pergunta",
     "gerar_sql": "Geração do SQL",
     "executar_sql": "Execução do SQL",
+    "investigar_dados": "Conferência de valores e datas",
     "erro_execucao": "Erro de execução",
     "reflexao_vazio": "Revisão do resultado vazio",
     "verificar_resultado": "Verificação do resultado",

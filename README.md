@@ -97,7 +97,8 @@ pergunta
   → plano verificável: tabelas, data do evento, filtros e contagem de pessoas
   → geração, validação estrutural e execução de SQL
      ├─ erro de SQL: nova tentativa com a mensagem de erro
-     └─ resultado vazio: uma reconsideração dos filtros
+     └─ resultado vazio ou contagem zero: confere categorias e datas relevantes;
+        depois reconsidera os filtros uma vez
   → verificação de aderência entre pergunta, SQL e resultado
      ├─ regras sobre contagem, agrupamento, ranking, tendência e resultado truncado
      ├─ leitura ambígua: segue com a premissa declarada
@@ -115,6 +116,7 @@ O agente é um grafo de estados em LangGraph (`desafio_1/agent/graph.py`). O gra
 | `context.py` | Identifica mensagens que dependem da pergunta anterior. |
 | `temporal.py` | Interpreta os meses citados na pergunta e identifica quando falta definir o evento que associa clientes a um mês. |
 | `query_plan.py` | Extrai exigências explícitas da pergunta e confere sua presença na consulta gerada: evento, data, filtros, clientes distintos, desempate e meses parciais. |
+| `investigation.py` | Quando uma consulta volta vazia, lê categorias e limites de data dos eventos pertinentes em conexão somente leitura, sem consultar valores pessoais. |
 | `db.py` | Valida a árvore sintática do SQL com SQLGlot e executa uma consulta `SELECT` por vez, com conexão somente leitura, autorização do SQLite e limites de linhas e tempo. |
 | `evidence.py` | Confere requisitos objetivos da pergunta contra o SQL e o resultado; verifica números e líderes citados na resposta. |
 | `nodes.py` | Gera, executa, corrige e verifica o SQL; escolhe a visualização e redige a resposta. |
@@ -153,7 +155,7 @@ O banco não atribui compras a campanhas. Em perguntas sobre qual campanha "atra
 
 ## Capacidades atuais
 
-- Consultas SQL validadas pela estrutura da instrução e executadas em conexão somente leitura, com tentativa de correção após erro e reconsideração de resultados vazios.
+- Consultas SQL validadas pela estrutura da instrução e executadas em conexão somente leitura, com tentativa de correção após erro e uma conferência de categorias e datas quando o resultado vem vazio ou a contagem é zero.
 - Verificação da métrica, dos filtros e do período, com checagens determinísticas do formato da evidência e dos números apresentados na resposta.
 - Interpretação de meses sem ano em todos os anos disponíveis, com tratamento dos meses incompletos em séries e coortes.
 - Contagem de clientes distintos em métricas de pessoas. Na comparação de campanhas, a consulta deve mostrar a contagem que determina a liderança.

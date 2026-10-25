@@ -39,6 +39,8 @@ class AgentState(TypedDict, total=False):
     last_was_empty: bool
     empty_retries: int
     reconsider_empty: bool
+    investigation: dict
+    investigation_count: int
     review_count: int
     review_needed: bool
     review_feedback: Optional[str]

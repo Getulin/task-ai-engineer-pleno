@@ -89,13 +89,14 @@ Erro retornado pelo banco:
 
 Corrija a consulta. Responda SOMENTE com o SQL corrigido, sem explicacao e sem markdown."""
 
-SQL_RECONSIDER_EMPTY = """A consulta abaixo executou com sucesso, mas retornou 0 linhas.
+SQL_RECONSIDER_EMPTY = """A consulta abaixo executou com sucesso, mas retornou 0 linhas ou uma contagem igual a 0.
 
 Pergunta original:
 {question}
 
 Consulta que retornou vazio:
 {sql}
+Categorias e intervalos de data verificados no banco: {investigation}
 
 A causa MAIS comum e assumir um ANO que nao tem dados. Antes de repetir o mesmo
 ano, confira no schema o intervalo real de datas. Se a pergunta cita um mes sem
