@@ -12,6 +12,9 @@ from . import prompts
 from .config import Settings
 from .context import is_followup, requires_context
 from .db import UnsafeQueryError, run_query, validate_read_only
+from .evidence import (
+    evidence_issues, mismatched_category_values, missing_rank_label, unsupported_numbers,
+)
 from .llm import ChatModel
 from .schema import discover_schema, find_partial_months, is_personal_column
 from .state import AgentState
@@ -190,6 +193,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
             "assumptions": [temporal.assumption] if temporal.assumption else [],
             "caveat": None,
             "answer_status": None,
+            "evidence_issues": [],
             "trace": _append_trace(
                 state, "descoberta_schema",
                 "Inspecionei o banco dinamicamente (tabelas, colunas e valores reais).",
@@ -293,6 +297,10 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
         context = {"sql": state.get("sql", ""), "result": result}
         history = list(state.get("review_history") or [])
         structural_issues = []
+        structural_issues.extend(evidence_issues(
+            state["question"], state.get("sql", ""), columns, rows,
+            state.get("result_truncated", False),
+        ))
         if _missing_purchase_cohort(state["question"], state.get("sql", "")):
             structural_issues.append(
                 "A pergunta relaciona campanhas a pessoas que compraram, mas o SQL "
@@ -337,6 +345,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
                 "review_needed": False,
                 "review_feedback": None,
                 "answer_status": "confirmed",
+                "evidence_issues": [],
                 "trace": _append_trace(state, "verificar_resultado",
                                        "A consulta foi considerada suficiente."),
             }
@@ -350,6 +359,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
                 "review_feedback": None,
                 "assumptions": assumptions,
                 "answer_status": "assumption",
+                "evidence_issues": [],
                 "trace": _append_trace(
                     state, "verificar_resultado",
                     "A consulta responde à pergunta sob uma premissa declarada.", assumption,
@@ -376,6 +386,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
             "review_needed": False,
             "review_history": history,
             "answer_status": "unconfirmed",
+            "evidence_issues": structural_issues,
             "caveat": feedback or "A verificação não confirmou que a consulta responde à pergunta.",
             "trace": _append_trace(
                 state, "verificar_resultado",
@@ -426,6 +437,17 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
             return {"answer": answer,
                     "trace": _append_trace(state, "resposta", "Falha após tentativas de correção.")}
 
+        if state.get("evidence_issues"):
+            return {
+                "answer": "Não foi possível confirmar uma resposta com os dados da consulta. "
+                          "Confira a tabela e o SQL abaixo.",
+                "trace": _append_trace(
+                    state, "validar_evidencia_final",
+                    "A consulta não sustenta uma conclusão confiável.",
+                    state["evidence_issues"],
+                ),
+            }
+
         columns = state.get("result_columns", [])
         rows = state.get("result_rows", [])
         notes = _partial_month_notes(columns, rows, state.get("partial_months") or [])
@@ -447,6 +469,30 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
             )),
         ]
         answer = _text(llm.invoke(messages))
+        unsupported = unsupported_numbers(
+            answer, state["question"], state.get("sql", ""), rows, notes
+        )
+        missing_label = missing_rank_label(state["question"], answer, rows)
+        mismatched = mismatched_category_values(answer, rows)
+        if unsupported or missing_label or mismatched:
+            details = []
+            if unsupported:
+                details.append("Números sem suporte nos dados: " + ", ".join(unsupported))
+            if missing_label:
+                details.append("O líder citado não corresponde ao resultado da consulta.")
+            if mismatched:
+                details.append("Valores associados à categoria errada: " + ", ".join(mismatched))
+            return {
+                "answer": "A consulta foi executada, mas não foi possível confirmar o texto "
+                          "da resposta. Confira os dados na tabela abaixo.",
+                "answer_status": "unconfirmed",
+                "caveat": " ".join(details),
+                "data_notes": notes,
+                "trace": _append_trace(
+                    state, "validar_evidencia_final",
+                    "A síntese foi substituída porque continha afirmações sem evidência.", details,
+                ),
+            }
         return {"answer": answer,
                 "data_notes": notes,
                 "trace": _append_trace(state, "resposta", "Sintetizei a resposta final em linguagem natural.")}

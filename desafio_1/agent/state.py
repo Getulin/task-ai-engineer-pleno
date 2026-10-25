@@ -46,6 +46,7 @@ class AgentState(TypedDict, total=False):
     assumptions: list[str]
     caveat: Optional[str]
     answer_status: Optional[AnswerStatus]
+    evidence_issues: list[str]
 
     viz: VizSpec
     answer: str

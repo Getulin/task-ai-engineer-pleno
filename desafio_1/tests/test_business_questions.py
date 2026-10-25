@@ -198,7 +198,6 @@ def test_campaign_leader_revises_send_count_and_exposes_adhesion_metric():
     corrected_sql = CAMPAIGN_ADHESION + "LIMIT 1"
     llm = RecordingLLM([
         wrong_sql,
-        '{"verdict": "revise", "feedback": "Envios não são adesão; conte clientes distintos que interagiram e retorne a contagem."}',
         corrected_sql,
         '{"verdict": "ok", "feedback": ""}',
         '{"type": "table", "x": null, "y": null, "title": "Campanha"}',
@@ -208,7 +207,7 @@ def test_campaign_leader_revises_send_count_and_exposes_adhesion_metric():
     assert result["result_rows"] == [("Black Friday", 32)]
     assert result["answer_status"] == "confirmed"
     assert "clientes distintos com interagiu=1" in llm.calls[0][0].content
-    assert "Uma consulta que devolve só o nome" in llm.calls[1][0].content
+    assert "medida numérica" in result["review_history"][0]["feedback"]
 
 
 def test_purchase_categories_rank_by_purchases_per_customer():

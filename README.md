@@ -78,13 +78,15 @@ pergunta
   → descoberta de tabelas, colunas, relações e valores do SQLite
   → interpretação do período citado
      └─ "clientes em um mês" sem evento definido: pede esclarecimento
-  → geração e execução de SQL
+  → geração, validação estrutural e execução de SQL
      ├─ erro de SQL: nova tentativa com a mensagem de erro
      └─ resultado vazio: uma reconsideração dos filtros
   → verificação de aderência entre pergunta, SQL e resultado
+     ├─ regras sobre contagem, agrupamento, ranking, tendência e resultado truncado
      ├─ leitura ambígua: segue com a premissa declarada
-     └─ erro objetivo: até uma consulta adicional; se persistir, resposta com ressalva
+     └─ erro objetivo: até uma consulta adicional; se faltar evidência, não conclui
   → escolha de tabela, barras ou linhas
+  → conferência dos números e do líder citados no texto final
   → resposta e registro das etapas/consultas
 ```
 
@@ -95,16 +97,19 @@ O agente é um grafo de estados em LangGraph (`desafio_1/agent/graph.py`). O gra
 | `schema.py` | Lê o esquema em tempo de execução: tabelas, colunas, relações, valores de colunas de baixa cardinalidade, intervalos de datas e meses cobertos só em parte. Exemplos de colunas pessoais reconhecidas são omitidos do contexto do modelo. |
 | `context.py` | Identifica mensagens que dependem da pergunta anterior. |
 | `temporal.py` | Interpreta os meses citados na pergunta e identifica quando falta definir o evento que associa clientes a um mês. |
-| `db.py` | Executa uma instrução `SELECT` ou `WITH` por vez, em conexão somente leitura, com limite de linhas e de tempo. |
+| `db.py` | Valida a árvore sintática do SQL com SQLGlot e executa uma consulta `SELECT` por vez, com conexão somente leitura, autorização do SQLite e limites de linhas e tempo. |
+| `evidence.py` | Confere requisitos objetivos da pergunta contra o SQL e o resultado; verifica números e líderes citados na resposta. |
 | `nodes.py` | Gera, executa, corrige e verifica o SQL; escolhe a visualização e redige a resposta. |
 | `llm.py` | Cria o modelo do provedor configurado e repete chamadas recusadas por limite de taxa. |
 | `app.py` | Interface Streamlit com resposta, gráfico, avisos, histórico da sessão e a seção “Etapas e consultas”. Envia a última pergunta interpretada para resolver continuações. |
 
-A verificação classifica cada resultado em três casos: a consulta responde à pergunta; a pergunta admite mais de uma leitura e a consulta aplica uma delas, que passa a ser exibida como premissa; ou há um erro objetivo (métrica, filtro, agrupamento ou período), que gera uma consulta adicional. A nova verificação recebe as correções já pedidas. Se o erro persistir, o resultado aparece com a ressalva em vez de ser descartado.
+A verificação combina regras determinísticas com a avaliação do modelo. As regras exigem medidas numéricas em contagens e rankings, agrupamento pelas dimensões pedidas e série de pelo menos dois períodos para tendências; resultados cortados pelo limite de linhas não sustentam uma conclusão completa. O modelo avalia a métrica, os filtros, o período e as ambiguidades da pergunta. Um erro objetivo pode gerar uma consulta adicional, que recebe as correções anteriores. Se uma exigência determinística continuar sem evidência, a interface apresenta os dados e o SQL sem afirmar uma conclusão. Ressalvas do verificador do modelo são mostradas ao usuário.
+
+Antes de exibir a resposta redigida pelo modelo, o agente confere seus números com as medidas retornadas e os períodos da consulta. Em resultados simples de duas colunas, confere também se cada número foi associado à categoria correta. Em um ranking com um único líder, confere se o nome retornado aparece no texto. Uma afirmação sem suporte substitui a síntese por um aviso; as regras não demonstram, por si só, que toda interpretação de negócio está correta.
 
 As consultas de negócio do agente são geradas em tempo de execução. O código usa SQL fixo para inspecionar o esquema, e os testes contêm consultas de referência. O agente omite exemplos de colunas pessoais reconhecidas no esquema e mascara resultados quando o nome da coluna é reconhecido como pessoal. Esse filtro baseado em nomes não cobre aliases ou expressões que incluam dados pessoais. A tabela exibida localmente mantém os valores originais.
 
-As datas do banco vão, em conjunto, de 22/07/2024 a 22/07/2025; o intervalo varia entre as tabelas. O agente recebe a orientação de excluir meses incompletos de séries mensais e coortes (julho de 2024 e julho de 2025) e de incluir todos os registros em totais e médias. Um mês citado pelo nome sem ano abrange todas as ocorrências desse mês nos anos disponíveis; “mais recente” ou um ano explícito alteram esse recorte. Em contagens após um evento, o mês do evento é M0, “mês seguinte” é M+1 e “terceiro mês” é M+3. O verificador confere o SQL gerado, mas a correção da resposta ainda depende do modelo.
+As datas do banco vão, em conjunto, de 22/07/2024 a 22/07/2025; o intervalo varia entre as tabelas. O agente recebe a orientação de excluir meses incompletos de séries mensais e coortes (julho de 2024 e julho de 2025) e de incluir todos os registros em totais e médias. Um mês citado pelo nome sem ano abrange todas as ocorrências desse mês nos anos disponíveis; “mais recente” ou um ano explícito alteram esse recorte. Em contagens após um evento, o mês do evento é M0, “mês seguinte” é M+1 e “terceiro mês” é M+3. As regras determinísticas cobrem incompatibilidades verificáveis; a interpretação da métrica de negócio ainda depende da avaliação do modelo.
 
 O agente escolhe entre tabela, barras e linhas conforme a pergunta e as colunas retornadas. Pedidos explícitos de tabela, gráfico de barras ou gráfico de linhas prevalecem quando as colunas permitem o gráfico. A interface avisa quando a consulta excede o limite de linhas. O histórico mantém perguntas e resultados visíveis durante a sessão. Uma continuação como “e por estado?” usa a última pergunta interpretada para formar uma consulta completa; a interpretação aparece na interface. Perguntas independentes não usam esse contexto, e resultados anteriores não são reenviados ao modelo nessa etapa.
 
@@ -130,7 +135,8 @@ O banco não atribui compras a campanhas. Em perguntas sobre qual campanha "atra
 
 ## Capacidades atuais
 
-- Consultas SQL com tentativa de correção após erro, reconsideração de resultados vazios e verificação da métrica, dos filtros e do período antes da resposta.
+- Consultas SQL validadas pela estrutura da instrução e executadas em conexão somente leitura, com tentativa de correção após erro e reconsideração de resultados vazios.
+- Verificação da métrica, dos filtros e do período, com checagens determinísticas do formato da evidência e dos números apresentados na resposta.
 - Interpretação de meses sem ano em todos os anos disponíveis, com tratamento dos meses incompletos em séries e coortes.
 - Contagem de clientes distintos em métricas de pessoas. Na comparação de campanhas, a consulta deve mostrar a contagem que determina a liderança.
 - Visualização por tabela, barras ou linhas, respeitando o formato solicitado quando os dados retornados o permitem.

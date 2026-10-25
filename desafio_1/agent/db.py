@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-import re
 import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
-_FORBIDDEN = re.compile(
-    r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|REPLACE|TRUNCATE|"
-    r"ATTACH|DETACH|PRAGMA|VACUUM|REINDEX|GRANT)\b",
-    re.IGNORECASE,
-)
+from sqlglot import exp, parse
+from sqlglot.errors import SqlglotError
+
+_BLOCKED_FUNCTIONS = {"load_extension", "readfile", "writefile", "eval"}
 
 class UnsafeQueryError(ValueError):
     """Levantada quando o SQL gerado nao e uma leitura segura."""
@@ -28,27 +26,38 @@ class QueryResult:
 def _strip_sql(sql: str) -> str:
     """Remove cercas Markdown e pontos e virgulas finais."""
     sql = sql.strip()
-    sql = re.sub(r"^```(?:sql)?|```$", "", sql, flags=re.IGNORECASE | re.MULTILINE)
-    sql = sql.strip()
-    return sql.rstrip(";").strip()
+    if sql.startswith("```") and sql.endswith("```"):
+        lines = sql.splitlines()
+        if len(lines) >= 3 and lines[0].lower() in {"```", "```sql"} and lines[-1] == "```":
+            sql = "\n".join(lines[1:-1]).strip()
+    return sql
 
 def validate_read_only(sql: str) -> str:
-    """Valida e normaliza o SQL. Retorna o SQL limpo ou levanta UnsafeQueryError."""
+    """Aceita uma única consulta de leitura, sem comandos ocultos em CTEs."""
     clean = _strip_sql(sql)
     if not clean:
         raise UnsafeQueryError("Consulta vazia.")
-
-    if ";" in clean:
-        raise UnsafeQueryError("Múltiplas instruções não são permitidas.")
-
-    lowered = clean.lstrip("(").lstrip().lower()
-    if not (lowered.startswith("select") or lowered.startswith("with")):
-        raise UnsafeQueryError("Apenas consultas SELECT/WITH são permitidas.")
-
-    if _FORBIDDEN.search(clean):
-        raise UnsafeQueryError("A consulta contém uma operação de escrita/DDL proibida.")
-
-    return clean
+    if len(clean) > 16_000:
+        raise UnsafeQueryError("A consulta excede o tamanho permitido.")
+    try:
+        statements = parse(clean, read="sqlite")
+    except (SqlglotError, RecursionError) as exc:
+        raise UnsafeQueryError("A estrutura do SQL não pôde ser validada.") from exc
+    if len(statements) != 1 or statements[0] is None:
+        raise UnsafeQueryError("Envie exatamente uma consulta SELECT.")
+    query = statements[0]
+    if not isinstance(query, (exp.Select, exp.Union, exp.Intersect, exp.Except)):
+        raise UnsafeQueryError("Apenas consultas SELECT são permitidas.")
+    for node in query.walk():
+        if isinstance(node, (exp.DDL, exp.DML, exp.Command, exp.Into)):
+            raise UnsafeQueryError("A consulta contém uma operação não autorizada.")
+        if isinstance(node, exp.Table) and (node.db or node.catalog):
+            raise UnsafeQueryError("Não é permitido consultar outro banco de dados.")
+        if isinstance(node, exp.Func):
+            name = node.name if isinstance(node, exp.Anonymous) else node.sql_name()
+            if name.lower() in _BLOCKED_FUNCTIONS:
+                raise UnsafeQueryError(f"Função não autorizada: {name}.")
+    return clean.rstrip(";").strip()
 
 def run_query(db_path: str, sql: str, row_limit: int = 1000,
               timeout_s: float | None = None) -> QueryResult:
@@ -66,6 +75,23 @@ def run_query(db_path: str, sql: str, row_limit: int = 1000,
 
     uri = f"file:{Path(db_path).as_posix()}?mode=ro"
     conn = sqlite3.connect(uri, uri=True)
+    conn.execute("PRAGMA query_only = ON")
+    conn.enable_load_extension(False)
+
+    def authorize(action, arg1, arg2, database, trigger):
+        if action == sqlite3.SQLITE_SELECT:
+            return sqlite3.SQLITE_OK
+        if action == sqlite3.SQLITE_READ and (
+            database == "main" or (database is None and arg2 == "")
+        ):
+            return sqlite3.SQLITE_OK
+        if action == sqlite3.SQLITE_RECURSIVE:
+            return sqlite3.SQLITE_OK
+        if action == sqlite3.SQLITE_FUNCTION and (arg2 or "").lower() not in _BLOCKED_FUNCTIONS:
+            return sqlite3.SQLITE_OK
+        return sqlite3.SQLITE_DENY
+
+    conn.set_authorizer(authorize)
     if timeout_s:
         deadline = time.monotonic() + timeout_s
         conn.set_progress_handler(lambda: int(time.monotonic() > deadline), 10_000)
