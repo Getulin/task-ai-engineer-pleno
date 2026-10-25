@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import unicodedata
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -355,6 +356,16 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
             spec = _sanitize_viz(parsed, columns, rows, fallback=spec)
         except Exception:
             pass
+        requested = _requested_viz(state["question"])
+        if requested == "table":
+            spec = {"type": "table", "x": None, "y": None, "series": None,
+                    "title": spec["title"]}
+        elif requested in ("bar", "line"):
+            chart = spec if spec["type"] in ("bar", "line") else _heuristic_viz(
+                state["question"], columns, rows
+            )
+            if chart["type"] in ("bar", "line"):
+                spec = {**chart, "type": requested}
         return {
             "viz": spec,
             "trace": _append_trace(
@@ -419,6 +430,20 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
     }
 
 _DATE_HINT = re.compile(r"(data|ano|mes|mês|periodo|período)", re.IGNORECASE)
+
+
+def _requested_viz(question: str) -> str | None:
+    normalized = unicodedata.normalize("NFD", question.casefold())
+    normalized = "".join(c for c in normalized if unicodedata.category(c) != "Mn")
+    requested = set()
+    if re.search(r"\b(?:tabela|formato tabular)\b", normalized):
+        requested.add("table")
+    if re.search(r"\bgraficos?\s+(?:de\s+)?barras?\b", normalized):
+        requested.add("bar")
+    if re.search(r"\bgraficos?\s+(?:de\s+)?linhas?\b", normalized):
+        requested.add("line")
+    return next(iter(requested)) if len(requested) == 1 else None
+
 
 def _is_number(v: Any) -> bool:
     return isinstance(v, (int, float)) and not isinstance(v, bool)

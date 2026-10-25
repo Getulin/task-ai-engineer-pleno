@@ -107,7 +107,7 @@ def main() -> None:
         st.header("Configuração")
         st.markdown(f"**Provedor:** `{settings.provider}`")
         st.markdown(f"**Modelo:** `{settings.model}`")
-        st.markdown(f"**Máx. correções de SQL:** {settings.max_repair_attempts}")
+        st.markdown(f"**Máx. execuções com erro:** {settings.max_repair_attempts}")
         st.divider()
         st.subheader("Exemplos")
         for ex in EXAMPLES:

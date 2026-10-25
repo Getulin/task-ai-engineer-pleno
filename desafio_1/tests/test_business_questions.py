@@ -455,3 +455,29 @@ def test_multi_channel_trend_keeps_series_when_viz_model_fails():
     assert result["viz"]["y"] == "reclamacoes"
     assert result["viz"]["series"] == "canal"
     assert len(result["result_rows"]) > 12
+
+
+@pytest.mark.parametrize("question, sql, suggested, expected", [
+    (
+        "Mostre em tabela as reclamações não resolvidas por canal.",
+        UNRESOLVED_COMPLAINTS,
+        '{"type": "bar", "x": "canal", "y": "reclamacoes", "title": "Reclamações"}',
+        "table",
+    ),
+    (
+        "Mostre em gráfico de barras as reclamações não resolvidas por canal.",
+        UNRESOLVED_COMPLAINTS,
+        TABLE_VIZ,
+        "bar",
+    ),
+    (
+        "Mostre em gráfico de linhas a tendência de reclamações por canal no último ano.",
+        COMPLAINT_TREND,
+        '{"type": "bar", "x": "mes", "y": "reclamacoes", "series": "canal", "title": "Tendência"}',
+        "line",
+    ),
+])
+def test_explicit_visualization_request_takes_precedence(question, sql, suggested, expected):
+    llm = ScriptedLLM([sql, '{"verdict": "ok", "feedback": ""}', suggested, "Resultado."])
+    result = _ask(llm, question)
+    assert result["viz"]["type"] == expected

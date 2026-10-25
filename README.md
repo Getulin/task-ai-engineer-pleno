@@ -2,11 +2,18 @@
 
 Aplicação em Python para responder perguntas de negócio sobre o banco SQLite fornecido no desafio. O usuário faz uma pergunta em português; o agente consulta o esquema do banco, gera SQL, executa a consulta e apresenta a resposta com tabela ou gráfico, junto com as consultas executadas.
 
-Este repositório implementa o **Desafio 1**. O Desafio 2 não faz parte da entrega de código.
+Este repositório implementa o **Desafio 1**.
 
 ## Execução
 
 Requer Python 3.11 ou superior. O banco de exemplo está em `data/anexo_desafio_1.db`. Antes de rodar, defina o provedor de LLM no `.env` (veja [Configuração](#configuração)). Para rodar localmente sem chave de API, veja [docs/ollama.md](docs/ollama.md).
+
+Clone o repositório e execute os comandos abaixo na raiz do projeto:
+
+```bash
+git clone https://github.com/Getulin/task-ai-engineer-pleno.git
+cd task-ai-engineer-pleno
+```
 
 ### Windows (PowerShell)
 
@@ -31,6 +38,16 @@ cp .env.example .env
 ### Configuração
 
 O `.env` define o provedor, o modelo e os limites e é ignorado pelo Git. `LLM_PROVIDER` e `LLM_MODEL` são obrigatórios. Para provedores remotos, inclua também a chave correspondente. O banco já está no repositório; `DB_PATH` só precisa ser alterado se você usar outro arquivo.
+
+Para usar o Gemini, por exemplo, preencha estas linhas no `.env` com uma chave sua:
+
+```env
+LLM_PROVIDER=gemini
+LLM_MODEL=gemini-3.5-flash-lite
+GEMINI_API_KEY=SUA_CHAVE_AQUI
+```
+
+Depois de alterar o `.env` ou o código do agente, encerre o Streamlit com `Ctrl+C` e execute novamente o comando de inicialização. O agente é mantido em cache durante a execução.
 
 | Variável | Uso |
 | --- | --- |
@@ -89,7 +106,7 @@ As consultas de negócio do agente são geradas em tempo de execução. O códig
 
 As datas do banco vão, em conjunto, de 22/07/2024 a 22/07/2025; o intervalo varia entre as tabelas. O agente recebe a orientação de excluir meses incompletos de séries mensais e coortes (julho de 2024 e julho de 2025) e de incluir todos os registros em totais e médias. Um mês citado pelo nome sem ano abrange todas as ocorrências desse mês nos anos disponíveis; “mais recente” ou um ano explícito alteram esse recorte. Em contagens após um evento, o mês do evento é M0, “mês seguinte” é M+1 e “terceiro mês” é M+3. O verificador confere o SQL gerado, mas a correção da resposta ainda depende do modelo.
 
-O agente escolhe entre tabela, barras e linhas conforme a pergunta e as colunas retornadas. A interface avisa quando a consulta excede o limite de linhas. O histórico mantém perguntas e resultados visíveis durante a sessão. Uma continuação como “e por estado?” usa a última pergunta interpretada para formar uma consulta completa; a interpretação aparece na interface. Perguntas independentes não usam esse contexto, e resultados anteriores não são reenviados ao modelo nessa etapa.
+O agente escolhe entre tabela, barras e linhas conforme a pergunta e as colunas retornadas. Pedidos explícitos de tabela, gráfico de barras ou gráfico de linhas prevalecem quando as colunas permitem o gráfico. A interface avisa quando a consulta excede o limite de linhas. O histórico mantém perguntas e resultados visíveis durante a sessão. Uma continuação como “e por estado?” usa a última pergunta interpretada para formar uma consulta completa; a interpretação aparece na interface. Perguntas independentes não usam esse contexto, e resultados anteriores não são reenviados ao modelo nessa etapa.
 
 ## Consultas testadas
 
@@ -109,11 +126,12 @@ Os valores abaixo são referências conferidas com consultas SQL ao banco. `desa
 
 Na pergunta sobre pagamentos, `compras` é usada como aproximação, pois o banco não registra pagamentos separadamente. Nas duas últimas, adesão significa quantidade de clientes distintos com `interagiu = 1`. Black Friday tem 32 clientes nessa condição, contra 30 de Volta às Aulas. Se medida como proporção dos clientes alcançados, Black Friday também lidera: 32 de 45 (71,11%). Contar envios levaria a outro ranking e não mede adesão.
 
-## Melhorias realizadas
+## Capacidades atuais
 
 - Consultas SQL com tentativa de correção após erro, reconsideração de resultados vazios e verificação da métrica, dos filtros e do período antes da resposta.
 - Interpretação de meses sem ano em todos os anos disponíveis, com tratamento dos meses incompletos em séries e coortes.
 - Contagem de clientes distintos em métricas de pessoas. Na comparação de campanhas, a consulta deve mostrar a contagem que determina a liderança.
+- Visualização por tabela, barras ou linhas, respeitando o formato solicitado quando os dados retornados o permitem.
 - Histórico de perguntas e respostas na sessão, com interpretação de continuações a partir da última pergunta e exibição da pergunta completa usada na consulta.
 - Limites de tempo e linhas para consultas; exemplos de colunas pessoais reconhecidas são omitidos do contexto enviado ao modelo.
 
@@ -122,7 +140,7 @@ Na pergunta sobre pagamentos, `compras` é usada como aproximação, pois o banc
 - Usar um modelo mais capaz apenas na verificação e medir o acerto com um conjunto maior de perguntas de referência. Com modelos pequenos, perguntas de várias etapas podem variar entre execuções.
 - Contexto de mais de uma pergunta e referências aos resultados anteriores; a implementação atual usa apenas a última pergunta interpretada.
 - Cache do esquema e seleção das tabelas relevantes, para bancos maiores.
-- Aplicar de forma determinística o tipo de visualização quando o usuário pedir tabela ou gráfico específico.
+- Melhorar a escolha dos eixos para resultados com mais de três colunas ou múltiplas métricas.
 - Exportação do resultado completo, além do limite de linhas carregadas na interface. Os controles atuais permitem baixar os dados carregados na tabela e a imagem do gráfico.
 - Controle de recursos para uso em banco compartilhado, além dos limites de linhas e de tempo.
 - Versões fixas das dependências, para reproduzir o ambiente testado.
