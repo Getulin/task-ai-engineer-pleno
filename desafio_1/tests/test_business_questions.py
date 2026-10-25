@@ -94,6 +94,20 @@ GROUP BY nome_campanha
 ORDER BY clientes DESC, nome_campanha
 """
 
+NOVEMBER_BUYER_CAMPAIGNS = """
+WITH compradores AS (
+    SELECT c.id, MIN(p.data_compra) AS primeira_compra
+    FROM clientes c JOIN compras p ON p.cliente_id = c.id
+    WHERE c.genero = 'Masculino' AND c.estado = 'Rio Grande do Sul'
+      AND p.data_compra >= '2024-11-01' AND p.data_compra < '2024-12-01'
+    GROUP BY c.id
+)
+SELECT m.nome_campanha, m.data_envio, m.interagiu
+FROM compradores b JOIN campanhas_marketing m ON m.cliente_id = b.id
+WHERE m.data_envio <= b.primeira_compra
+ORDER BY m.data_envio
+"""
+
 
 def test_top_five_states_count_people_in_app_purchases_in_may():
     expected = [
@@ -121,6 +135,61 @@ def test_campaign_adhesion_counts_distinct_interacting_customers():
     sent = _rows("""SELECT nome_campanha, COUNT(*) FROM campanhas_marketing
         GROUP BY nome_campanha ORDER BY COUNT(*) DESC""")
     assert sent[0] == ("Volta às Aulas", 60)
+
+
+def test_november_campaign_was_sent_to_buyer_without_interaction():
+    assert _rows(NOVEMBER_BUYER_CAMPAIGNS) == [
+        ("Liquidação de Verão", "2024-11-22", 0)
+    ]
+
+
+def test_campaign_followup_preserves_purchase_cohort():
+    wrong_sql = """SELECT m.nome_campanha, m.data_envio, m.interagiu
+FROM campanhas_marketing m JOIN clientes c ON c.id = m.cliente_id
+WHERE c.genero = 'Masculino' AND c.estado = 'Rio Grande do Sul'
+  AND m.data_envio >= '2024-11-01' AND m.data_envio < '2024-12-01'"""
+    llm = RecordingLLM([
+        wrong_sql,
+        NOVEMBER_BUYER_CAMPAIGNS,
+        '{"verdict": "ok", "feedback": ""}',
+        TABLE_VIZ,
+        "Foi enviada Liquidação de Verão; não houve interação registrada.",
+    ])
+    result = _ask(
+        llm,
+        "Que campanha foi enviada antes da compra ao homem do Rio Grande do Sul "
+        "que comprou em novembro de 2024, e houve interação?",
+    )
+    assert result["result_rows"] == [("Liquidação de Verão", "2024-11-22", 0)]
+    assert result["review_count"] == 1
+    assert result["answer_status"] == "confirmed"
+    assert "compras" in result["sql"]
+    assert "não usa a tabela compras" in result["review_history"][0]["feedback"]
+
+
+def test_campaign_attribution_requires_interaction_evidence():
+    wrong_sql = """SELECT m.nome_campanha, COUNT(DISTINCT m.cliente_id) AS clientes
+FROM campanhas_marketing m JOIN compras p ON p.cliente_id = m.cliente_id
+JOIN clientes c ON c.id = p.cliente_id
+WHERE c.genero = 'Masculino' AND c.estado = 'Rio Grande do Sul'
+  AND p.data_compra >= '2024-11-01' AND p.data_compra < '2024-12-01'
+  AND m.data_envio <= p.data_compra
+GROUP BY m.nome_campanha"""
+    llm = RecordingLLM([
+        wrong_sql,
+        NOVEMBER_BUYER_CAMPAIGNS,
+        '{"verdict": "ok", "feedback": ""}',
+        TABLE_VIZ,
+        "Liquidação de Verão foi enviada antes da compra; não houve interação.",
+    ])
+    result = _ask(
+        llm,
+        "Que campanha atraiu o homem do Rio Grande do Sul que comprou em "
+        "novembro de 2024?",
+    )
+    assert result["result_rows"] == [("Liquidação de Verão", "2024-11-22", 0)]
+    assert result["answer_status"] == "confirmed"
+    assert "não mostra se ele interagiu" in result["review_history"][0]["feedback"]
 
 
 def test_campaign_leader_revises_send_count_and_exposes_adhesion_metric():

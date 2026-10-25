@@ -126,6 +126,8 @@ Os valores abaixo são referências conferidas com consultas SQL ao banco. `desa
 
 Na pergunta sobre pagamentos, `compras` é usada como aproximação, pois o banco não registra pagamentos separadamente. Nas duas últimas, adesão significa quantidade de clientes distintos com `interagiu = 1`. Black Friday tem 32 clientes nessa condição, contra 30 de Volta às Aulas. Se medida como proporção dos clientes alcançados, Black Friday também lidera: 32 de 45 (71,11%). Contar envios levaria a outro ranking e não mede adesão.
 
+O banco não atribui compras a campanhas. Em perguntas sobre qual campanha "atraiu" um comprador, o agente verifica campanhas enviadas antes da compra e informa se houve interação; a ordem das datas, por si só, não demonstra que a campanha causou a compra.
+
 ## Capacidades atuais
 
 - Consultas SQL com tentativa de correção após erro, reconsideração de resultados vazios e verificação da métrica, dos filtros e do período antes da resposta.

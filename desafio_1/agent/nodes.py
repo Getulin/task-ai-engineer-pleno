@@ -78,6 +78,33 @@ def _parse_assessment(text: str) -> tuple[str, str, str]:
             verdict = "ok"
     return verdict, feedback, assumption
 
+
+def _missing_purchase_cohort(question: str, sql: str) -> bool:
+    normalized = unicodedata.normalize("NFD", question.casefold())
+    normalized = "".join(c for c in normalized if unicodedata.category(c) != "Mn")
+    asks_both = re.search(r"\bcampanh\w*\b", normalized) and re.search(
+        r"\bcompr\w*\b", normalized
+    )
+    return bool(asks_both and not re.search(r"\bcompras\b", sql, re.IGNORECASE))
+
+
+def _missing_campaign_interaction(question: str, columns: list[str]) -> bool:
+    normalized = unicodedata.normalize("NFD", question.casefold())
+    normalized = "".join(c for c in normalized if unicodedata.category(c) != "Mn")
+    asks_attribution = all(re.search(pattern, normalized) for pattern in (
+        r"\bcampanh\w*\b",
+        r"\bcompr\w*\b",
+        r"\b(?:atrai\w*|influenci\w*|motiv\w*|gerou)\b",
+    ))
+    normalized_columns = [
+        "".join(c for c in unicodedata.normalize("NFD", column.casefold())
+                if unicodedata.category(c) != "Mn")
+        for column in columns
+    ]
+    return bool(asks_attribution and not any(
+        re.search(r"intera(?:g|c)", column) for column in normalized_columns
+    ))
+
 def _shift_month(month: str, delta: int) -> str:
     year, mon = map(int, month.split("-"))
     index = year * 12 + mon - 1 + delta
@@ -265,28 +292,45 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
         }
         context = {"sql": state.get("sql", ""), "result": result}
         history = list(state.get("review_history") or [])
-        try:
-            messages = [
-                SystemMessage(prompts.ASSESS_SYSTEM),
-                HumanMessage(prompts.ASSESS_HUMAN.format(
-                    question=state["question"],
-                    temporal_guidance=state["temporal_guidance"],
-                    history=_format_history(history),
-                    partial_months=", ".join(state.get("partial_months") or []) or "nenhum",
-                    sql=state.get("sql", ""),
-                    result=json.dumps(result, ensure_ascii=False),
-                )),
-            ]
-            verdict, feedback, assumption = _parse_assessment(_text(llm.invoke(messages)))
-        except Exception:
-            return {
-                "review_needed": False,
-                "answer_status": "unverified",
-                "trace": _append_trace(
-                    state, "verificar_resultado",
-                    "A verificação não pôde ser concluída; a resposta segue sem confirmação.",
-                ),
-            }
+        structural_issues = []
+        if _missing_purchase_cohort(state["question"], state.get("sql", "")):
+            structural_issues.append(
+                "A pergunta relaciona campanhas a pessoas que compraram, mas o SQL "
+                "não usa a tabela compras. Preserve o evento de compra e seu período "
+                "para selecionar os clientes antes de consultar as campanhas."
+            )
+        if _missing_campaign_interaction(state["question"], columns):
+            structural_issues.append(
+                "A pergunta sugere que uma campanha atraiu o comprador, mas o "
+                "resultado não mostra se ele interagiu. Retorne a campanha enviada "
+                "antes da compra, sua data de envio e o indicador interagiu; não "
+                "atribua a compra causalmente à campanha."
+            )
+        if structural_issues:
+            verdict, feedback, assumption = "revise", " ".join(structural_issues), ""
+        else:
+            try:
+                messages = [
+                    SystemMessage(prompts.ASSESS_SYSTEM),
+                    HumanMessage(prompts.ASSESS_HUMAN.format(
+                        question=state["question"],
+                        temporal_guidance=state["temporal_guidance"],
+                        history=_format_history(history),
+                        partial_months=", ".join(state.get("partial_months") or []) or "nenhum",
+                        sql=state.get("sql", ""),
+                        result=json.dumps(result, ensure_ascii=False),
+                    )),
+                ]
+                verdict, feedback, assumption = _parse_assessment(_text(llm.invoke(messages)))
+            except Exception:
+                return {
+                    "review_needed": False,
+                    "answer_status": "unverified",
+                    "trace": _append_trace(
+                        state, "verificar_resultado",
+                        "A verificação não pôde ser concluída; a resposta segue sem confirmação.",
+                    ),
+                }
 
         if verdict == "ok":
             return {

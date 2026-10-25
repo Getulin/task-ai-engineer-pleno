@@ -8,6 +8,9 @@ menos que a nova mensagem os altere explicitamente. Se a mensagem for uma nova
 pergunta completa, devolva-a sem mudanças. Não use resultados anteriores para
 inventar fatos. Se faltar informação para formar uma pergunta inequívoca,
 devolva uma solicitação curta de esclarecimento.
+Se a pergunta anterior seleciona pessoas por um evento (por exemplo, quem comprou
+em novembro), preserve esse evento e sua data na pergunta de acompanhamento,
+mesmo quando ela pede dados de outra tabela, como campanhas dessas pessoas.
 
 Formato: {"question": "<pergunta completa>"} ou {"clarification": "<pergunta ao usuário>"}."""
 
@@ -52,6 +55,13 @@ Regras importantes:
   Envios (COUNT(*)) e clientes alcançados sem interação não medem adesão. Se a
   pergunta pedir a campanha líder, ordene por essa contagem de clientes e retorne
   também o valor usado no ranking, mesmo que só tenha pedido o nome.
+- Ao perguntar por campanhas de pessoas que compraram em um período, selecione
+  essas pessoas em compras usando data_compra e depois relacione as campanhas por
+  cliente_id. Não substitua a data da compra por data_envio.
+- O banco não registra atribuição causal entre campanha e compra. Para perguntas
+  como "qual campanha atraiu quem comprou", mostre campanhas enviadas antes da
+  compra e se houve interação, sem concluir que causaram a compra. Não filtre
+  interagiu=1 se o usuário não pediu somente campanhas com interação.
 - Colunas booleanas (resolvido, interagiu) usam 0/1. "nao resolvido" = resolvido = 0.
 - Faca os JOINs necessarios pelas chaves estrangeiras indicadas.
 - Nao invente colunas. Nao escreva comandos de escrita (INSERT/UPDATE/DELETE/DDL).
@@ -137,6 +147,13 @@ Convenções já adotadas pelo sistema, que não são erro:
   Ordenar pelo número de envios ou de clientes apenas alcançados é erro objetivo.
   Uma consulta que devolve só o nome da campanha líder, sem a métrica usada para
   ordená-la, não permite conferir o ranking: peça revisão para incluir a contagem.
+- Em perguntas sobre campanhas de clientes que compraram, a consulta deve manter
+  a seleção dos compradores pela tabela compras e por data_compra; filtrar apenas
+  data_envio e os atributos de clientes troca a população perguntada.
+- "Campanha que atraiu" não prova causalidade neste banco. Se o usuário não
+  restringiu a campanhas com interação, mostrar só interagiu=1 pode ocultar
+  campanhas enviadas; peça a data de envio e o indicador de interação antes da
+  compra, com a limitação causal declarada na resposta.
 - Contagem de meses após um evento: o mês do evento é M0, "mês seguinte" é M+1 e
   "terceiro mês" é M+3, salvo se a pergunta definir outra contagem.
 - Meses com dados parciais ficam fora de resultados agrupados por mês e de
@@ -173,6 +190,9 @@ Use acentuação correta na resposta.
 Vá direto ao ponto: NÃO use saudações, vocativos ("Prezado Diretor") nem assinaturas.
 Quando houver vários valores, prefira uma lista objetiva. Não invente números.
 Ao apontar um líder, informe a métrica de liderança quando ela constar no resultado.
+Não diga que uma campanha causou ou atraiu uma compra sem um vínculo de atribuição
+nos dados. Informe quais campanhas foram enviadas antes da compra e se o cliente
+interagiu; deixe explícito que isso não demonstra causalidade.
 Se o resultado estiver vazio, diga que não há dados para o filtro informado.
 Se houver premissas, declare-as em uma frase no início da resposta.
 Se houver ressalva pendente, apresente os números como não confirmados e diga em
