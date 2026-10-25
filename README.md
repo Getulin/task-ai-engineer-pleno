@@ -69,6 +69,22 @@ Depois de alterar o `.env` ou o código do agente, encerre o Streamlit com `Ctrl
 
 No Linux ou macOS, use `.venv/bin/python -m pytest desafio_1/tests -q`.
 
+### Avaliação de perguntas
+
+`desafio_1/eval_cases.py` reúne perguntas de referência com SQL independente. A comparação usa os valores retornados pelo banco; diferenças de texto ou de aliases no SQL não contam como erro. Para conferir as consultas de referência sem chamar o modelo:
+
+```bash
+python -m desafio_1.evaluate
+```
+
+Para executar o conjunto com o provedor configurado no `.env` e guardar o relatório local:
+
+```bash
+python -m desafio_1.evaluate --live --output eval_reports/resultado.json
+```
+
+`--case ID` seleciona uma pergunta e `--repeats N` repete cada pergunta até cinco vezes. O relatório inclui os resultados, SQL gerado, estado da resposta e duração. `eval_reports/` é ignorado pelo Git. A comparação automática identifica divergências de valores; casos ambíguos ou com colunas adicionais podem precisar de revisão humana.
+
 ## Fluxo e arquitetura
 
 ```text
