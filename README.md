@@ -6,7 +6,7 @@ Este repositório implementa o **Desafio 1**.
 
 ## Execução
 
-Use Python 3.12.14, indicado em `.python-version`. O banco de exemplo está em `data/anexo_desafio_1.db`. Antes de rodar, defina o provedor de LLM no `.env` (veja [Configuração](#configuração)). Para rodar localmente sem chave de API, veja [docs/ollama.md](docs/ollama.md).
+Use Python 3.12.10, indicado em `.python-version`. O banco de exemplo está em `data/anexo_desafio_1.db`. Antes de rodar, defina o provedor de LLM no `.env` (veja [Configuração](#configuração)). Para rodar localmente sem chave de API, veja [docs/ollama.md](docs/ollama.md).
 
 Clone o repositório e execute os comandos abaixo na raiz do projeto:
 
@@ -66,7 +66,7 @@ Depois de alterar o `.env` ou o código do agente, encerre o Streamlit com `Ctrl
 
 A interface mostra chamadas, duração e tokens informados pelo provedor sem gravar prompts ou linhas do banco em um log de uso. A estimativa de custo depende dos preços configurados e dos tokens fornecidos pela API. O limite de custo é conferido antes da próxima chamada; a última chamada pode ultrapassar o teto estimado. Tentativas internas de repetição por limite de taxa contam como uma chamada lógica nessa medição.
 
-`requirements.lock` fixa as versões instaladas e usadas nos testes. `requirements.txt` lista as dependências diretas e suas faixas para atualizações deliberadas. Ao atualizar uma delas, gere novamente o lock em um ambiente Python 3.12.14 limpo e execute os testes em Windows e Linux.
+`requirements.lock` fixa as versões instaladas e usadas nos testes. `requirements.txt` lista as dependências diretas e suas faixas para atualizações deliberadas. Ao atualizar uma delas, gere novamente o lock em um ambiente Python 3.12.10 limpo e execute os testes em Windows e Linux.
 
 ### Testes
 
