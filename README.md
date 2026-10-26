@@ -6,7 +6,7 @@ Este repositório implementa o **Desafio 1**.
 
 ## Execução
 
-Requer Python 3.11 ou superior. O banco de exemplo está em `data/anexo_desafio_1.db`. Antes de rodar, defina o provedor de LLM no `.env` (veja [Configuração](#configuração)). Para rodar localmente sem chave de API, veja [docs/ollama.md](docs/ollama.md).
+Use Python 3.12.14, indicado em `.python-version`. O banco de exemplo está em `data/anexo_desafio_1.db`. Antes de rodar, defina o provedor de LLM no `.env` (veja [Configuração](#configuração)). Para rodar localmente sem chave de API, veja [docs/ollama.md](docs/ollama.md).
 
 Clone o repositório e execute os comandos abaixo na raiz do projeto:
 
@@ -19,7 +19,7 @@ cd task-ai-engineer-pleno
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\python -m pip install -r requirements.txt
+.\.venv\Scripts\python -m pip install -r requirements.lock
 Copy-Item .env.example .env
 # defina LLM_PROVIDER e LLM_MODEL no .env
 .\.venv\Scripts\python -m streamlit run desafio_1/app.py
@@ -29,7 +29,7 @@ Copy-Item .env.example .env
 
 ```bash
 python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m pip install -r requirements.lock
 cp .env.example .env
 # defina LLM_PROVIDER e LLM_MODEL no .env
 .venv/bin/python -m streamlit run desafio_1/app.py
@@ -66,6 +66,8 @@ Depois de alterar o `.env` ou o código do agente, encerre o Streamlit com `Ctrl
 
 A interface mostra chamadas, duração e tokens informados pelo provedor sem gravar prompts ou linhas do banco em um log de uso. A estimativa de custo depende dos preços configurados e dos tokens fornecidos pela API. O limite de custo é conferido antes da próxima chamada; a última chamada pode ultrapassar o teto estimado. Tentativas internas de repetição por limite de taxa contam como uma chamada lógica nessa medição.
 
+`requirements.lock` fixa as versões instaladas e usadas nos testes. `requirements.txt` lista as dependências diretas e suas faixas para atualizações deliberadas. Ao atualizar uma delas, gere novamente o lock em um ambiente Python 3.12.14 limpo e execute os testes em Windows e Linux.
+
 ### Testes
 
 ```powershell
@@ -73,6 +75,8 @@ A interface mostra chamadas, duração e tokens informados pelo provedor sem gra
 ```
 
 No Linux ou macOS, use `.venv/bin/python -m pytest desafio_1/tests -q`.
+
+O workflow em `.github/workflows/ci.yml` instala o lock em Windows e Ubuntu, executa os testes, confere as dependências e roda as consultas SQL de referência. Ele não precisa de chave de API; a avaliação ao vivo com LLM é executada separadamente.
 
 ### Avaliação de perguntas
 
@@ -90,7 +94,7 @@ Para executar o conjunto com o provedor configurado no `.env` e guardar o relat�
 
 No Linux ou macOS, substitua `.\.venv\Scripts\python` por `.venv/bin/python`.
 
-`--case ID` seleciona uma pergunta e `--repeats N` repete cada pergunta até cinco vezes. O relatório inclui a resposta, os resultados, o SQL gerado, o estado da resposta, a duração, as chamadas ao modelo e os tokens quando informados pelo provedor. `eval_reports/` é ignorado pelo Git. A comparação automática identifica divergências de valores; casos ambíguos ou com colunas adicionais podem precisar de revisão humana.
+`--case ID` seleciona uma pergunta e `--repeats N` repete cada pergunta até cinco vezes. O relatório inclui a resposta, os resultados, o SQL gerado, o estado da resposta, a duração, as chamadas ao modelo e os tokens quando informados pelo provedor. Também registra a versão do Python, o sistema operacional, o commit, o hash do banco e do lock e os parâmetros não secretos do modelo. `eval_reports/` é ignorado pelo Git. A comparação automática identifica divergências de valores; casos ambíguos ou com colunas adicionais podem precisar de revisão humana. Mesmo com temperatura zero, execuções do modelo podem produzir SQL ou texto diferentes.
 
 ## Fluxo e arquitetura
 
@@ -179,4 +183,3 @@ O banco não atribui compras a campanhas. Em perguntas sobre qual campanha "atra
 - Melhorar a escolha dos eixos para resultados com mais de três colunas ou múltiplas métricas.
 - Exportação do resultado completo, além do limite de linhas carregadas na interface. Os controles atuais permitem baixar os dados carregados na tabela e a imagem do gráfico.
 - Controle de recursos para uso em banco compartilhado, além dos limites de linhas e de tempo.
-- Versões fixas das dependências, para reproduzir o ambiente testado.
