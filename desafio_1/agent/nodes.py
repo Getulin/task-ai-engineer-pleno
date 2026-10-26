@@ -274,6 +274,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
                 sql=context.get("sql", ""),
                 result=json.dumps(context.get("result", {}), ensure_ascii=False),
                 feedback=state.get("review_feedback") or "",
+                partial_months=", ".join(state.get("partial_months") or []) or "nenhum",
             ))
             detail = "Revisei a consulta após verificar a aderência à pergunta."
             patch["review_needed"] = False

@@ -116,10 +116,13 @@ Revisões anteriores: {history}
 Consulta anterior: {sql}
 Resultado observado: {result}
 Ponto a corrigir ou investigar: {feedback}
+Meses parciais identificados no banco: {partial_months}
 
 Use o resultado observado quando for necessário para a próxima etapa. Mantenha
 as correções já feitas nas revisões anteriores. Gere uma nova consulta SELECT ou
-WITH que responda à pergunta. Responda somente com SQL."""
+WITH que responda à pergunta. Se a revisão apontar um mês parcial numa série
+mensal ou coorte, exclua explicitamente esse mês pela data do evento na nova
+consulta. Responda somente com SQL."""
 
 ASSESS_SYSTEM = """Verifique se uma consulta SQL e seu resultado respondem à pergunta
 original. Considere a métrica, filtros, agrupamentos, período e granularidade.

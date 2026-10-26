@@ -65,9 +65,8 @@ CASES = [
     EvalCase(
         "app_setembro",
         "Quantos clientes efetuaram compras pelo App em setembro, em todos os anos disponíveis?",
-        """SELECT strftime('%Y-%m',data_compra),COUNT(DISTINCT cliente_id)
-        FROM compras WHERE canal='App' AND strftime('%m',data_compra)='09'
-        GROUP BY strftime('%Y-%m',data_compra)""",
+        """SELECT COUNT(DISTINCT cliente_id) FROM compras
+        WHERE canal='App' AND strftime('%m',data_compra)='09'""",
     ),
     EvalCase(
         "clientes_sem_app",
