@@ -78,17 +78,19 @@ No Linux ou macOS, use `.venv/bin/python -m pytest desafio_1/tests -q`.
 
 `desafio_1/eval_cases.py` reúne perguntas de referência com SQL independente. A comparação usa os valores retornados pelo banco; diferenças de texto ou de aliases no SQL não contam como erro. Para conferir as consultas de referência sem chamar o modelo:
 
-```bash
-python -m desafio_1.evaluate
+```powershell
+.\.venv\Scripts\python -m desafio_1.evaluate
 ```
 
 Para executar o conjunto com o provedor configurado no `.env` e guardar o relatório local:
 
-```bash
-python -m desafio_1.evaluate --live --output eval_reports/resultado.json
+```powershell
+.\.venv\Scripts\python -m desafio_1.evaluate --live --output eval_reports/resultado.json
 ```
 
-`--case ID` seleciona uma pergunta e `--repeats N` repete cada pergunta até cinco vezes. O relatório inclui os resultados, SQL gerado, estado da resposta, duração, chamadas ao modelo e tokens quando informados pelo provedor. `eval_reports/` é ignorado pelo Git. A comparação automática identifica divergências de valores; casos ambíguos ou com colunas adicionais podem precisar de revisão humana.
+No Linux ou macOS, substitua `.\.venv\Scripts\python` por `.venv/bin/python`.
+
+`--case ID` seleciona uma pergunta e `--repeats N` repete cada pergunta até cinco vezes. O relatório inclui a resposta, os resultados, o SQL gerado, o estado da resposta, a duração, as chamadas ao modelo e os tokens quando informados pelo provedor. `eval_reports/` é ignorado pelo Git. A comparação automática identifica divergências de valores; casos ambíguos ou com colunas adicionais podem precisar de revisão humana.
 
 ## Fluxo e arquitetura
 
@@ -120,7 +122,7 @@ O agente é um grafo de estados em LangGraph (`desafio_1/agent/graph.py`). O gra
 | `schema.py` | Lê o esquema em tempo de execução: tabelas, colunas, relações, valores de colunas de baixa cardinalidade, intervalos de datas e meses cobertos só em parte. Exemplos de colunas pessoais reconhecidas são omitidos do contexto do modelo. |
 | `context.py` | Identifica mensagens que dependem da pergunta anterior. |
 | `temporal.py` | Interpreta os meses citados na pergunta e identifica quando falta definir o evento que associa clientes a um mês. |
-| `query_plan.py` | Extrai exigências explícitas da pergunta e confere sua presença na consulta gerada: evento, data, filtros, clientes distintos, desempate e meses parciais. |
+| `query_plan.py` | Extrai exigências explícitas da pergunta e confere sua presença na consulta gerada: evento, data, filtros, clientes distintos, desempate, meses parciais e períodos mensais solicitados. |
 | `investigation.py` | Quando uma consulta volta vazia, lê categorias e limites de data dos eventos pertinentes em conexão somente leitura, sem consultar valores pessoais. |
 | `db.py` | Valida a árvore sintática do SQL com SQLGlot e executa uma consulta `SELECT` por vez, com conexão somente leitura, autorização do SQLite e limites de linhas e tempo. |
 | `evidence.py` | Confere requisitos objetivos da pergunta contra o SQL e o resultado; verifica números e líderes citados na resposta. |
