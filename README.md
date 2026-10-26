@@ -58,8 +58,13 @@ Depois de alterar o `.env` ou o código do agente, encerre o Streamlit com `Ctrl
 | `GEMINI_API_KEY`, `OPENAI_API_KEY`, `GROQ_API_KEY` | Chave do provedor escolhido |
 | `DB_PATH` | Caminho do SQLite, relativo à raiz do projeto ou absoluto (padrão: `data/anexo_desafio_1.db`) |
 | `LLM_REQUESTS_PER_SECOND` | Limite local de chamadas ao modelo; `0` desativa. Ajuste conforme a cota da sua conta. |
+| `LLM_MAX_CALLS_PER_QUESTION` | Limite de chamadas lógicas ao modelo em cada pergunta (padrão: `12`). |
+| `LLM_INPUT_USD_PER_MILLION`, `LLM_OUTPUT_USD_PER_MILLION` | Preços do modelo configurado por milhão de tokens; `0` deixa o custo indisponível. |
+| `LLM_MAX_ESTIMATED_COST_USD` | Interrompe novas chamadas quando a estimativa acumulada atinge o valor configurado. `0` desativa; exige os preços acima. |
 | `SQL_MAX_REPAIR_ATTEMPTS` | Número máximo de execuções com erro antes de desistir (padrão: `3`) |
 | `SQL_ROW_LIMIT`, `SQL_TIMEOUT_SECONDS` | Limites por consulta (padrão: 1.000 linhas e 10 s) |
+
+A interface mostra chamadas, duração e tokens informados pelo provedor sem gravar prompts ou linhas do banco em um log de uso. A estimativa de custo depende dos preços configurados e dos tokens fornecidos pela API. O limite de custo é conferido antes da próxima chamada; a última chamada pode ultrapassar o teto estimado. Tentativas internas de repetição por limite de taxa contam como uma chamada lógica nessa medição.
 
 ### Testes
 
@@ -83,7 +88,7 @@ Para executar o conjunto com o provedor configurado no `.env` e guardar o relat�
 python -m desafio_1.evaluate --live --output eval_reports/resultado.json
 ```
 
-`--case ID` seleciona uma pergunta e `--repeats N` repete cada pergunta até cinco vezes. O relatório inclui os resultados, SQL gerado, estado da resposta e duração. `eval_reports/` é ignorado pelo Git. A comparação automática identifica divergências de valores; casos ambíguos ou com colunas adicionais podem precisar de revisão humana.
+`--case ID` seleciona uma pergunta e `--repeats N` repete cada pergunta até cinco vezes. O relatório inclui os resultados, SQL gerado, estado da resposta, duração, chamadas ao modelo e tokens quando informados pelo provedor. `eval_reports/` é ignorado pelo Git. A comparação automática identifica divergências de valores; casos ambíguos ou com colunas adicionais podem precisar de revisão humana.
 
 ## Fluxo e arquitetura
 
@@ -162,6 +167,7 @@ O banco não atribui compras a campanhas. Em perguntas sobre qual campanha "atra
 - Visualização por tabela, barras ou linhas, respeitando o formato solicitado quando os dados retornados o permitem.
 - Histórico de perguntas e respostas na sessão, com interpretação de continuações a partir da última pergunta e exibição da pergunta completa usada na consulta.
 - Limites de tempo e linhas para consultas; exemplos de colunas pessoais reconhecidas são omitidos do contexto enviado ao modelo.
+- Limites de chamadas ao modelo por pergunta e métricas de duração, tokens e custo estimado quando configurado.
 
 ## Melhorias e extensões
 

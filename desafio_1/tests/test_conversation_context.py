@@ -52,7 +52,8 @@ GROUP BY c.estado ORDER BY c.estado"""
     assert result["original_question"] == "e por estado?"
     assert sum(row[1] for row in result["result_rows"]) == 22
     assert result["answer_status"] == "confirmed"
-    assert result["trace"][0]["step"] == "contextualizar_pergunta"
+    assert result["trace"][0]["data"]["stage"] == "contexto"
+    assert any(step["step"] == "contextualizar_pergunta" for step in result["trace"])
     assert llm.calls[0][0].content == prompts.CONTEXT_SYSTEM
     assert previous in llm.calls[0][1].content
     assert "result_rows" not in llm.calls[0][1].content

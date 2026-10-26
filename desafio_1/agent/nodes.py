@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import time
 import unicodedata
 from typing import Any
 
@@ -26,6 +27,10 @@ _MAX_REVIEW_RETRIES = 1
 _ANSWER_ROWS = 50
 _MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
 _VIZ_LABELS = {"table": "tabela", "bar": "gráfico de barras", "line": "gráfico de linhas"}
+
+
+class ModelLimitReached(RuntimeError):
+    pass
 
 def _text(response: Any) -> str:
     """Converte o conteudo da resposta do modelo em texto."""
@@ -142,6 +147,39 @@ def _partial_month_notes(columns: list[str], rows: list[tuple],
 def make_nodes(llm: ChatModel, settings: Settings) -> dict:
     """Cria os nos com o LLM e as settings injetados (closures)."""
 
+    def ask_model(state: AgentState, stage: str, messages: list) -> Any:
+        calls = [step for step in state.get("trace", []) if step["step"] == "chamada_modelo"]
+        if len(calls) >= settings.max_model_calls:
+            raise ModelLimitReached("Limite de chamadas ao modelo por pergunta atingido.")
+        spent = sum((step.get("data") or {}).get("estimated_cost_usd") or 0 for step in calls)
+        if settings.max_estimated_cost_usd > 0 and spent >= settings.max_estimated_cost_usd:
+            raise ModelLimitReached("Limite estimado de custo por pergunta atingido.")
+        started = time.monotonic()
+        try:
+            response = llm.invoke(messages)
+        except Exception as exc:
+            state["trace"] = _append_trace(
+                state, "chamada_modelo", f"Falha na etapa {stage}.",
+                {"stage": stage, "duration_ms": round((time.monotonic() - started) * 1000, 1),
+                 "status": "error", "error_type": type(exc).__name__},
+            )
+            raise
+        usage = getattr(response, "usage_metadata", None) or {}
+        input_tokens = usage.get("input_tokens") or 0
+        output_tokens = usage.get("output_tokens") or 0
+        cost = None
+        if input_tokens or output_tokens:
+            if settings.input_usd_per_million or settings.output_usd_per_million:
+                cost = round((input_tokens * settings.input_usd_per_million
+                              + output_tokens * settings.output_usd_per_million) / 1_000_000, 8)
+        state["trace"] = _append_trace(
+            state, "chamada_modelo", f"Etapa {stage} concluída.",
+            {"stage": stage, "duration_ms": round((time.monotonic() - started) * 1000, 1),
+             "status": "ok", "input_tokens": input_tokens or None,
+             "output_tokens": output_tokens or None, "estimated_cost_usd": cost},
+        )
+        return response
+
     def contextualize(state: AgentState) -> AgentState:
         question = state["question"].strip()
         previous = (state.get("previous_question") or "").strip()
@@ -156,7 +194,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
                 )
             return patch
         try:
-            response = _parse_json(_text(llm.invoke([
+            response = _parse_json(_text(ask_model(state, "contexto", [
                 SystemMessage(prompts.CONTEXT_SYSTEM),
                 HumanMessage(prompts.CONTEXT_HUMAN.format(
                     previous_question=previous, question=question,
@@ -175,6 +213,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
             else:
                 raise ValueError("Resposta de contexto incompleta")
         except Exception:
+            patch["trace"] = list(state.get("trace", []))
             patch["clarification"] = (
                 "Não consegui relacionar esta mensagem à pergunta anterior. "
                 "Pode escrever a pergunta completa?"
@@ -256,7 +295,14 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
             human = HumanMessage(state["question"])
             detail = "Gerei a consulta SQL inicial a partir da pergunta."
 
-        sql = _text(llm.invoke([system, human]))
+        try:
+            sql = _text(ask_model(state, "gerar_sql", [system, human]))
+        except ModelLimitReached as exc:
+            return {
+                "model_limit": True,
+                "error": str(exc),
+                "trace": _append_trace(state, "limite_modelo", str(exc)),
+            }
         try:
             sql = validate_read_only(sql)
         except UnsafeQueryError:
@@ -349,7 +395,9 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
                         result=json.dumps(result, ensure_ascii=False),
                     )),
                 ]
-                verdict, feedback, assumption = _parse_assessment(_text(llm.invoke(messages)))
+                verdict, feedback, assumption = _parse_assessment(
+                    _text(ask_model(state, "verificar_resultado", messages))
+                )
             except Exception:
                 return {
                     "review_needed": False,
@@ -427,7 +475,7 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
                     sample=sample, n_rows=len(rows),
                 )),
             ]
-            parsed = _parse_json(_text(llm.invoke(messages)))
+            parsed = _parse_json(_text(ask_model(state, "decidir_visualizacao", messages)))
             spec = _sanitize_viz(parsed, columns, rows, fallback=spec)
         except Exception:
             pass
@@ -488,7 +536,17 @@ def make_nodes(llm: ChatModel, settings: Settings) -> dict:
                 sample_note=prompts.ANSWER_SAMPLE_NOTE if partial else "",
             )),
         ]
-        answer = _text(llm.invoke(messages))
+        try:
+            answer = _text(ask_model(state, "sintetizar", messages))
+        except ModelLimitReached as exc:
+            return {
+                "answer": "Não foi possível concluir a resposta dentro do limite de recursos do modelo. "
+                          "Confira a tabela e o SQL abaixo.",
+                "answer_status": "unconfirmed",
+                "caveat": str(exc),
+                "data_notes": notes,
+                "trace": _append_trace(state, "limite_modelo", str(exc)),
+            }
         unsupported = unsupported_numbers(
             answer, state["question"], state.get("sql", ""), rows, notes
         )

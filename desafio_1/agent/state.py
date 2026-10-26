@@ -33,6 +33,7 @@ class AgentState(TypedDict, total=False):
     result_columns: list[str]
     result_rows: list[tuple]
     error: Optional[str]
+    model_limit: bool
     repair_count: int
     result_truncated: bool
 

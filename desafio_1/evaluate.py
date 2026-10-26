@@ -74,6 +74,8 @@ def evaluate(
             try:
                 state = agent.invoke({"question": case.question, "trace": []})
                 actual = state.get("result_rows") or []
+                model_steps = [step.get("data") or {} for step in state.get("trace", [])
+                               if step.get("step") == "chamada_modelo"]
                 item["runs"].append({
                     "passed": state.get("answer_status") in {"confirmed", "assumption"}
                     and compare_rows(expected, actual, case.comparison),
@@ -82,6 +84,16 @@ def evaluate(
                     "sql": state.get("sql"),
                     "review_count": state.get("review_count", 0),
                     "repair_count": state.get("repair_count", 0),
+                    "model_calls": len(model_steps),
+                    "input_tokens": sum(step.get("input_tokens") or 0 for step in model_steps),
+                    "output_tokens": sum(step.get("output_tokens") or 0 for step in model_steps),
+                    "model_duration_seconds": round(sum(
+                        step.get("duration_ms") or 0 for step in model_steps
+                    ) / 1000, 2),
+                    "estimated_cost_usd": round(sum(
+                        step.get("estimated_cost_usd") or 0 for step in model_steps
+                    ), 8) if any(step.get("estimated_cost_usd") is not None
+                              for step in model_steps) else None,
                     "caveat": state.get("caveat"),
                     "evidence_issues": state.get("evidence_issues") or [],
                     "duration_seconds": round(time.monotonic() - started, 2),

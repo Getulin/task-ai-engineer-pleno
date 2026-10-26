@@ -32,6 +32,8 @@ TRACE_LABELS = {
     "reflexao_vazio": "Revisão do resultado vazio",
     "verificar_resultado": "Verificação do resultado",
     "validar_evidencia_final": "Conferência da resposta",
+    "chamada_modelo": "Chamada ao modelo",
+    "limite_modelo": "Limite de recursos",
     "decidir_visualizacao": "Escolha da visualização",
     "resposta": "Resposta",
 }
@@ -59,6 +61,20 @@ def _render_viz(viz: dict, df: pd.DataFrame, key: str) -> None:
 
 def _render_reasoning(state: dict) -> None:
     with st.expander("Etapas e consultas", expanded=False):
+        model_steps = [step.get("data") or {} for step in state.get("trace", [])
+                       if step.get("step") == "chamada_modelo"]
+        if model_steps:
+            duration = sum(step.get("duration_ms") or 0 for step in model_steps) / 1000
+            st.caption(f"Chamadas ao modelo: {len(model_steps)} · Tempo: {duration:.1f} s")
+            input_tokens = sum(step.get("input_tokens") or 0 for step in model_steps)
+            output_tokens = sum(step.get("output_tokens") or 0 for step in model_steps)
+            if input_tokens or output_tokens:
+                st.caption(f"Tokens informados pelo provedor: {input_tokens} entrada · "
+                           f"{output_tokens} saída")
+            costs = [step["estimated_cost_usd"] for step in model_steps
+                     if step.get("estimated_cost_usd") is not None]
+            if costs:
+                st.caption(f"Custo estimado: US$ {sum(costs):.5f}")
         for i, step in enumerate(state.get("trace", []), 1):
             label = TRACE_LABELS.get(step["step"], step["step"])
             st.markdown(f"**{i}. {label}** — {step['detail']}")

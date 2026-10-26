@@ -57,7 +57,10 @@ def build_agent(settings: Settings | None = None, llm=None):
         {"clarify": "clarify", "generate": "generate_sql"},
     )
     g.add_edge("clarify", END)
-    g.add_edge("generate_sql", "execute_sql")
+    g.add_conditional_edges(
+        "generate_sql", lambda state: "limit" if state.get("model_limit") else "execute",
+        {"limit": "synthesize", "execute": "execute_sql"},
+    )
     g.add_conditional_edges(
         "execute_sql",
         _route_after_execute(settings),
