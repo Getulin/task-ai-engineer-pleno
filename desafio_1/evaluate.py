@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import platform
 import sqlite3
+import subprocess
 import time
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -11,6 +13,21 @@ from pathlib import Path
 
 from .agent.config import get_settings
 from .eval_cases import CASES, EvalCase
+
+
+def _source_revision(root: Path) -> tuple[str | None, bool | None]:
+    try:
+        revision = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=True, timeout=5,
+        ).stdout.strip()
+        status = subprocess.run(
+            ["git", "-C", str(root), "status", "--porcelain"],
+            capture_output=True, text=True, check=True, timeout=5,
+        ).stdout
+        return revision, not bool(status.strip())
+    except (OSError, subprocess.SubprocessError):
+        return None, None
 
 
 def reference_rows(db_path: str, case: EvalCase) -> list[tuple]:
@@ -55,8 +72,11 @@ def evaluate(
     db_path: str | None = None,
 ) -> dict:
     settings = get_settings() if agent is not None else None
+    root = Path(__file__).resolve().parents[1]
     database = Path(db_path or (settings.db_abspath if settings else
-                                  Path(__file__).resolve().parents[1] / "data" / "anexo_desafio_1.db"))
+                                  root / "data" / "anexo_desafio_1.db"))
+    revision, clean = _source_revision(root)
+    lock = root / "requirements.lock"
     selected = [case for case in CASES if case_ids is None or case.id in case_ids]
     if not selected:
         raise ValueError("Nenhuma pergunta corresponde aos IDs informados.")
@@ -64,6 +84,26 @@ def evaluate(
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "model": settings.model if settings else None,
         "database_sha256": hashlib.sha256(database.read_bytes()).hexdigest(),
+        "environment": {
+            "python": platform.python_version(),
+            "os": platform.system(),
+            "architecture": platform.machine(),
+            "git_commit": revision,
+            "working_tree_clean": clean,
+            "requirements_lock_sha256": hashlib.sha256(lock.read_bytes()).hexdigest()
+            if lock.exists() else None,
+        },
+        "model_config": {
+            "provider": settings.provider,
+            "model": settings.model,
+            "temperature": settings.temperature,
+            "max_model_calls": settings.max_model_calls,
+            "requests_per_second": settings.requests_per_second,
+            "max_estimated_cost_usd": settings.max_estimated_cost_usd,
+            "max_repair_attempts": settings.max_repair_attempts,
+            "row_limit": settings.row_limit,
+            "sql_timeout_seconds": settings.sql_timeout_s,
+        } if settings else None,
         "cases": [],
     }
     for case in selected:

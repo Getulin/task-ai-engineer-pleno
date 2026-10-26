@@ -30,3 +30,6 @@ def test_reference_only_needs_no_model():
     assert report["summary"] == {"cases": 1, "runs": 0, "passed": 0}
     assert report["cases"][0]["reference_rows"] == [(17,)]
     assert len(report["database_sha256"]) == 64
+    assert report["environment"]["python"]
+    assert len(report["environment"]["requirements_lock_sha256"]) == 64
+    assert report["model_config"] is None
