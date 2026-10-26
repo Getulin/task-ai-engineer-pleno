@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from desafio_1.agent.config import Settings
+from desafio_1.agent.graph import build_agent
 from desafio_1.agent.query_plan import make_plan, plan_issues
 from desafio_1.eval_cases import CASES
 from desafio_1.evaluate import reference_rows
@@ -56,3 +58,46 @@ def test_ties_and_partial_months_require_correction():
 def test_attribution_question_does_not_force_interaction_filter():
     plan = make_plan("Que campanha foi enviada antes da compra, e houve interação?")
     assert ("campanhas_marketing.interagiu", "1") not in plan.filters
+
+
+def test_explicit_monthly_range_requires_its_last_period():
+    question = (
+        "Qual percentual de cada coorte mensal de primeira compra voltou a comprar "
+        "no mês seguinte, de agosto a dezembro de 2024?"
+    )
+    plan = make_plan(question)
+    assert plan.expected_months == (
+        "2024-08", "2024-09", "2024-10", "2024-11", "2024-12",
+    )
+    incomplete = """SELECT strftime('%Y-%m',data_compra) mes,COUNT(*) FROM compras
+    WHERE data_compra>='2024-08-01' AND data_compra<'2024-12-01' GROUP BY mes"""
+    rows = [(month, 1) for month in plan.expected_months[:-1]]
+    assert any("2024-12" in issue for issue in plan_issues(plan, incomplete, rows, PARTIAL))
+
+
+def test_agent_revises_cohort_query_that_omits_december():
+    case = next(case for case in CASES if case.id == "retencao_coorte_mes_seguinte")
+    wrong = case.reference_sql.replace("<'2025-01-01'", "<'2024-12-01'")
+
+    class ScriptedLLM:
+        def __init__(self):
+            self.replies = iter([
+                wrong, case.reference_sql, '{"verdict":"ok"}',
+                '{"type":"table","x":null,"y":null,"title":"Coortes"}',
+                "Retenção por coorte.",
+            ])
+
+        def invoke(self, messages):
+            return next(self.replies)
+
+    settings = Settings(
+        provider="ollama", model="test", temperature=0, ollama_base_url="",
+        db_path=str(DB), max_repair_attempts=3, row_limit=1000,
+    )
+    result = build_agent(settings, llm=ScriptedLLM()).invoke({
+        "question": case.question, "trace": [],
+    })
+    assert result["answer_status"] == "confirmed"
+    assert result["review_count"] == 1
+    assert len(result["result_rows"]) == 5
+    assert "2024-12" in result["review_history"][0]["feedback"]

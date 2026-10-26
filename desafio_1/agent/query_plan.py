@@ -6,6 +6,16 @@ from dataclasses import asdict, dataclass
 
 from sqlglot import exp, parse_one
 
+_MONTHS = {
+    "janeiro": 1, "fevereiro": 2, "marco": 3, "abril": 4,
+    "maio": 5, "junho": 6, "julho": 7, "agosto": 8,
+    "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12,
+}
+_MONTH_RANGE = re.compile(
+    r"\b(?:de|entre)\s+(" + "|".join(_MONTHS) + r")\s+(?:a|ate|e)\s+("
+    + "|".join(_MONTHS) + r")\s+de\s+((?:19|20)\d{2})\b"
+)
+
 
 def _plain(value: str) -> str:
     text = unicodedata.normalize("NFD", value.casefold())
@@ -20,6 +30,7 @@ class QueryPlan:
     distinct_clients: bool
     top_n: int | None
     exclude_partial_months: bool
+    expected_months: tuple[str, ...] = ()
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -63,6 +74,15 @@ def make_plan(question: str) -> QueryPlan:
     top = re.search(r"\b(?:top\s*|(?:liste\s+)?os\s+)(\d+)\s+(?:estados|campanhas|categorias|canais)\b", text)
     trend = bool(re.search(r"\b(?:tendencia|evolucao|serie\s+mensal|coorte\w*)\b", text))
     include_partial = bool(re.search(r"\b(?:inclu\w*|com)\s+(?:os\s+)?meses\s+(?:parciais|incompletos)\b", text))
+    month_range = _MONTH_RANGE.search(text)
+    monthly_groups = bool(re.search(r"\b(?:cada\s+mes|coorte\w*|serie\s+mensal|tendencia)\b", text))
+    expected_months: tuple[str, ...] = ()
+    if month_range and monthly_groups:
+        first, last, year = month_range.groups()
+        if _MONTHS[first] <= _MONTHS[last]:
+            expected_months = tuple(
+                f"{year}-{month:02d}" for month in range(_MONTHS[first], _MONTHS[last] + 1)
+            )
     distinct_clients = bool(
         re.search(r"\bclientes?\b", text)
         and (purchase or campaign or support)
@@ -71,6 +91,7 @@ def make_plan(question: str) -> QueryPlan:
     return QueryPlan(
         tuple(tables), tuple(dates), tuple(filters), distinct_clients,
         int(top.group(1)) if top else None, trend and not include_partial,
+        expected_months,
     )
 
 
@@ -141,4 +162,10 @@ def plan_issues(plan: QueryPlan, sql: str, rows: list[tuple], partial_months: li
                            if isinstance(value, str) and value in partial_months})
         if included:
             issues.append("A série inclui meses parciais: " + ", ".join(included) + ".")
+    if plan.expected_months:
+        returned = {value for row in rows for value in row if isinstance(value, str)}
+        required = set(plan.expected_months) - (set(partial_months) if plan.exclude_partial_months else set())
+        missing = sorted(required - returned)
+        if missing:
+            issues.append("Faltam períodos solicitados: " + ", ".join(missing) + ".")
     return issues

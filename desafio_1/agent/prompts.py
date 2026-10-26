@@ -196,6 +196,7 @@ Escreva uma resposta curta, direta e factual baseada APENAS nos dados fornecidos
 Use acentuação correta na resposta.
 Vá direto ao ponto: NÃO use saudações, vocativos ("Prezado Diretor") nem assinaturas.
 Quando houver vários valores, prefira uma lista objetiva. Não invente números.
+Em séries mensais, identifique cada mês pelo rótulo YYYY-MM presente no resultado.
 Ao apontar um líder, informe a métrica de liderança quando ela constar no resultado.
 Não diga que uma campanha causou ou atraiu uma compra sem um vínculo de atribuição
 nos dados. Informe quais campanhas foram enviadas antes da compra e se o cliente

@@ -80,6 +80,7 @@ def evaluate(
                     "passed": state.get("answer_status") in {"confirmed", "assumption"}
                     and compare_rows(expected, actual, case.comparison),
                     "status": state.get("answer_status"),
+                    "answer": state.get("answer"),
                     "rows": actual,
                     "sql": state.get("sql"),
                     "review_count": state.get("review_count", 0),

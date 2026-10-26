@@ -70,6 +70,17 @@ def test_evidence_checks_measure_and_time_granularity():
     assert any("dois períodos" in issue for issue in issues)
 
 
+def test_threshold_count_requires_one_total_without_ranking():
+    question = "Quantos clientes fizeram pelo menos três compras pelo App?"
+    wrong = "SELECT COUNT(*) FROM compras GROUP BY cliente_id HAVING COUNT(*) >= 3"
+    issues = evidence_issues(question, wrong, ["total"], [(1,), (1,)], False)
+    assert any("total único" in issue for issue in issues)
+    assert not any("ordenar" in issue for issue in issues)
+
+    correct = "SELECT COUNT(*) FROM (SELECT cliente_id FROM compras GROUP BY cliente_id HAVING COUNT(*) >= 3)"
+    assert evidence_issues(question, correct, ["total"], [(61,)], False) == []
+
+
 def test_final_text_numbers_and_leader_are_grounded():
     sql = "SELECT nome_campanha, 32 AS clientes FROM campanhas_marketing LIMIT 1"
     rows = [("Black Friday", 32)]

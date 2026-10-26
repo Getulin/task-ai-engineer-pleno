@@ -80,13 +80,17 @@ def evidence_issues(
     if _COUNT.search(asked) and (not aggregate or not numeric):
         issues.append("A pergunta pede uma contagem ou total, mas falta uma medida agregada numérica.")
     dimensions = set(_DIMENSION.findall(asked))
+    if (_COUNT.match(asked) and len(rows) > 1 and not dimensions
+            and not re.search(r"\b(?:por|cada|liste|quais)\b", asked)):
+        issues.append("A pergunta pede um total único, mas a consulta retornou várias linhas.")
     group_terms = _grouped_dimensions(query)
     for dimension in sorted(dimensions):
         if dimension not in group_terms:
             issues.append(f"A pergunta pede resultados por {dimension}, mas o SQL não agrupa por essa dimensão.")
-    if _RANK.search(asked) and not numeric:
+    ranking = bool(_RANK.search(re.sub(r"\bpelo menos\b", "", asked)))
+    if ranking and not numeric:
         issues.append("A comparação pede a medida numérica usada para identificar o resultado.")
-    if _RANK.search(asked) and not query.find(exp.Order):
+    if ranking and not query.find(exp.Order):
         issues.append("A comparação exige ordenar a consulta pela medida relevante.")
     if _TREND.search(asked):
         periods = {
